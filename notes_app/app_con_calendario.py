@@ -532,7 +532,7 @@ class NotesApp:
             self.style.theme_use('alt')
 
         self.role_colors = {
-            "Programador": "#9370DB",
+            "Programador": "#D270DB",
             "Social": "#00bcd4",
             "Tesista": "#43aa8b",
             "General": "#90be6d",
