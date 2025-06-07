@@ -14,7 +14,7 @@ class NotesManager:
         os.makedirs(self.notes_dir, exist_ok=True)
         self.calendar_file = calendar_file
 
-        self.valid_roles = ["Programador", "Tesista", "General", "Asistente", "Work-out", "Estudiante", "Diseñador"]
+        self.valid_roles = ["Programador", "Tesista", "General", "Asistente", "Work-out", "Estudiante", "Diseñador", "Social"]
         self.eisenhower_categories = {
             "HACER_AHORA": "Urgente e Importante",
             "PLANIFICAR": "Importante, no Urgente",
@@ -533,6 +533,7 @@ class NotesApp:
 
         self.role_colors = {
             "Programador": "#9370DB",
+            "Social": "#00bcd4",
             "Tesista": "#43aa8b",
             "General": "#90be6d",
             "Asistente": "#f9c74f",
