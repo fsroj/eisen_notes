@@ -106,26 +106,30 @@ class NotesManager:
     def get_line_classification(self, line_text):
         """
         Determina todas las clasificaciones (roles y Eisenhower) en una línea.
+        Ahora soporta múltiples roles al inicio de la línea.
         Devuelve una lista de tuplas (tipo, nombre_clasificacion).
-        El orden de detección es importante: roles primero, luego Eisenhower.
         """
         original_line = line_text.strip()
         remaining_line = original_line
         classifications = []
 
-        # Verificar roles
-        for r in self.valid_roles:
-            role_prefix = f"[{r}]"
-            if remaining_line.startswith(role_prefix):
-                classifications.append(("role", r))
-                remaining_line = remaining_line[len(role_prefix):].strip() # Eliminar el prefijo y seguir buscando
-                break
+        # Detectar múltiples roles al inicio
+        found_role = True
+        while found_role:
+            found_role = False
+            for r in self.valid_roles:
+                role_prefix = f"[{r}]"
+                if remaining_line.startswith(role_prefix):
+                    classifications.append(("role", r))
+                    remaining_line = remaining_line[len(role_prefix):].strip()
+                    found_role = True
+                    break
 
-        # Verificar categorías de Eisenhower
+        # Solo una categoría Eisenhower por línea (puedes cambiar esto si quieres varias)
         for prefix, key in self.eisenhower_prefixes_map.items():
             if remaining_line.startswith(prefix):
                 classifications.append(("eisenhower", key))
-                remaining_line = remaining_line[len(prefix):].strip() # Eliminar el prefijo y seguir buscando
+                remaining_line = remaining_line[len(prefix):].strip()
                 break
 
         if not classifications and original_line:
@@ -766,17 +770,50 @@ class NotesApp:
 
     def display_content(self, content_lines_with_tags):
         """
-        Muestra el contenido en el ScrolledText, aplicando colores según el tag.
-        content_lines_with_tags: Lista de tuplas (line_text, tag_name)
+        Muestra el contenido en el ScrolledText, aplicando colores según los tags.
+        Si hay varios roles, colorea cada prefijo [Rol] con su color.
         """
         self.note_content_display.config(state=tk.NORMAL)
         self.note_content_display.delete(1.0, tk.END)
 
-        for line, tag in content_lines_with_tags:
-            if tag in self.role_colors or tag in self.eisenhower_tag_colors or tag == "general_text":
-                self.note_content_display.insert(tk.END, line + "\n", tag)
-            else:
-                self.note_content_display.insert(tk.END, line + "\n", "general_text")
+        for line, _ in content_lines_with_tags:
+            idx = 0
+            temp_line = line
+            # Detectar y colorear todos los roles al inicio
+            while True:
+                found = False
+                for role in self.notes_manager.valid_roles:
+                    prefix = f"[{role}]"
+                    if temp_line.startswith(prefix):
+                        self.note_content_display.insert(tk.END, prefix, role)
+                        temp_line = temp_line[len(prefix):]
+                        idx += len(prefix)
+                        found = True
+                        break
+                if not found:
+                    break
+            # Detectar y colorear la categoría Eisenhower si está presente
+            eisenhower_tag = None
+            for abbr, key in self.notes_manager.eisenhower_abbreviations.items():
+                prefix = f"[E:{abbr}]"
+                if temp_line.startswith(prefix):
+                    eisenhower_tag = "EISENHOWER_" + key
+                    self.note_content_display.insert(tk.END, prefix, eisenhower_tag)
+                    temp_line = temp_line[len(prefix):]
+                    idx += len(prefix)
+                    break
+            # El resto de la línea: color del primer rol, o Eisenhower, o general
+            tag_to_apply = "general_text"
+            detected = self.notes_manager.get_line_classification(line)
+            for d_type, d_name in detected:
+                if d_type == "role":
+                    tag_to_apply = d_name
+                    break
+                elif d_type == "eisenhower" and tag_to_apply == "general_text":
+                    tag_to_apply = "EISENHOWER_" + d_name
+            self.note_content_display.insert(tk.END, temp_line + "\n", tag_to_apply)
+
+        self.note_content_display.config(state=tk.DISABLED)
 
     def set_display_mode(self, mode):
         """
