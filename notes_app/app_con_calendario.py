@@ -1,7 +1,7 @@
 import os
 import tkinter as tk
-from tkinter import scrolledtext, messagebox, simpledialog, Toplevel
-from tkinter import ttk
+from tkinter import scrolledtext, messagebox, simpledialog, Toplevel, filedialog  # Asegúrate de importar filedialog
+from tkinter import ttk, PhotoImage
 from datetime import datetime, timedelta
 import json
 import hashlib
@@ -32,8 +32,18 @@ class NotesManager:
         self.calendar_events = self._load_calendar_events()
 
     def _get_note_path(self, title):
-        """Genera la ruta completa del archivo de la nota."""
-        return os.path.join(self.notes_dir, f"{title.replace(' ', '_').lower()}.md")
+        """
+        Genera la ruta completa del archivo de la nota.
+        Soporta jerarquía: 'padre/hijo' -> notes/padre/hijo.md
+        """
+        # Soporta rutas tipo 'padre/hijo'
+        parts = [p.replace(' ', '_').lower() for p in title.split('/')]
+        if len(parts) > 1:
+            dir_path = os.path.join(self.notes_dir, *parts[:-1])
+            os.makedirs(dir_path, exist_ok=True)
+        else:
+            dir_path = self.notes_dir
+        return os.path.join(dir_path, f"{parts[-1]}.md")
 
     def create_note(self, title):
         """Crea una nueva nota si no existe."""
@@ -63,6 +73,23 @@ class NotesManager:
         """Lista todas las notas disponibles."""
         notes = [f.replace('.md', '') for f in os.listdir(self.notes_dir) if f.endswith('.md')]
         return [note.replace('_', ' ').title() for note in notes]
+
+    def list_notes_hierarchy(self):
+        """
+        Devuelve la jerarquía de notas como un diccionario:
+        { 'padre': [hijo1, hijo2, ...], ... }
+        Las notas en subcarpetas se consideran hijas.
+        """
+        hierarchy = {}
+        for root, dirs, files in os.walk(self.notes_dir):
+            parent = os.path.relpath(root, self.notes_dir)
+            if parent == ".":
+                parent = ""
+            md_files = [f[:-3] for f in files if f.endswith('.md')]
+            if parent not in hierarchy:
+                hierarchy[parent] = []
+            hierarchy[parent].extend(md_files)
+        return hierarchy
 
     def get_note_content(self, title):
         """Obtiene el contenido completo de una nota."""
@@ -587,13 +614,25 @@ class NotesApp:
 
         tk.Label(left_frame, text="Notas", font=("Helvetica Neue", 11, "bold"), bg=self.panel_bg, fg=self.fg_color).pack(pady=(0, 5))
 
-        self.notes_listbox = tk.Listbox(left_frame, width=16, height=10, font=self.font_normal,
-                                         bg=self.text_input_bg, fg=self.fg_color,
-                                         selectbackground=self.accent_color, selectforeground="white",
-                                         highlightbackground=self.border_color, highlightthickness=1,
-                                         bd=0, relief="flat")
-        self.notes_listbox.pack(pady=2, fill=tk.BOTH, expand=True)
-        self.notes_listbox.bind("<<ListboxSelect>>", self.on_note_select)
+        # Estilo para Treeview (ventana de selección de notas)
+        self.style.configure("Custom.Treeview",
+                             background=self.panel_bg,
+                             foreground=self.fg_color,
+                             fieldbackground=self.panel_bg,
+                             bordercolor=self.border_color,
+                             font=self.font_normal)
+        self.style.map("Custom.Treeview",
+                       background=[('selected', self.accent_color)],
+                       foreground=[('selected', 'white')])
+        self.style.configure("Custom.Treeview.Heading",
+                             background=self.panel_bg,
+                             foreground=self.fg_color,
+                             font=self.font_bold)
+
+        # Reemplaza el Listbox por un Treeview para jerarquía
+        self.notes_tree = ttk.Treeview(left_frame, show="tree", selectmode="browse", style="Custom.Treeview")
+        self.notes_tree.pack(pady=2, fill=tk.BOTH, expand=True)
+        self.notes_tree.bind("<<TreeviewSelect>>", self.on_note_tree_select)
 
         # Botones de gestión de notas en el panel izquierdo
         button_frame_left = ttk.Frame(left_frame, style='TFrame')
@@ -684,13 +723,23 @@ class NotesApp:
         ttk.Button(theme_frame, text="Tema Oscuro", command=lambda: self.set_theme("dark")).pack(side=tk.LEFT, padx=2)
 
     def load_notes_list(self):
-        self.notes_listbox.delete(0, tk.END)
-        notes = self.notes_manager.list_notes()
-        if not notes:
-            self.notes_listbox.insert(tk.END, "No hay notas aún.")
-        else:
-            for note in notes:
-                self.notes_listbox.insert(tk.END, note)
+        self.notes_tree.delete(*self.notes_tree.get_children())
+        hierarchy = self.notes_manager.list_notes_hierarchy()
+        node_map = {}
+
+        # Primero, agrega los padres (carpetas raíz)
+        for parent, children in hierarchy.items():
+            if parent == "":
+                for note in children:
+                    node_map[note] = self.notes_tree.insert("", "end", text=note, values=(note,))
+            else:
+                # Asegura que el padre esté creado
+                parent_node = node_map.get(parent)
+                if not parent_node:
+                    parent_node = self.notes_tree.insert("", "end", text=parent, open=True)
+                    node_map[parent] = parent_node
+                for note in children:
+                    node_map[f"{parent}/{note}"] = self.notes_tree.insert(parent_node, "end", text=note, values=(f"{parent}/{note}",))
 
     def create_new_note(self):
         title = simpledialog.askstring("Crear Nota", "Introduce el título de la nueva nota:",
@@ -702,10 +751,17 @@ class NotesApp:
             if success:
                 self.load_notes_list()
 
-    def on_note_select(self, event):
-        selected_index = self.notes_listbox.curselection()
-        if selected_index:
-            self.active_note_title = self.notes_listbox.get(selected_index[0])
+    def on_note_tree_select(self, event):
+        selected = self.notes_tree.selection()
+        if selected:
+            item = self.notes_tree.item(selected[0])
+            # Si el ítem no tiene 'values', es una carpeta/padre
+            if not item['values']:
+                # Deselecciona el ítem para evitar confusión visual
+                self.notes_tree.selection_remove(selected[0])
+                return
+            note_path = item['values'][0]
+            self.active_note_title = note_path
             self.show_all_content()
 
     def display_content(self, content_lines_with_tags):
@@ -748,7 +804,7 @@ class NotesApp:
             return
 
         content, msg = self.notes_manager.get_note_content(self.active_note_title)
-        if content:
+        if content is not None:  # Cambia aquí: permite cadena vacía
             lines = content.split('\n')
             display_data = []
             for line in lines:
