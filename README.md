@@ -10,3 +10,4 @@ file jerarquy system: 0
 secondary file view: 0
 link between inner and outer files: 0
 changing roles between files: 0
+tasks quantity on note selection panel: 0
