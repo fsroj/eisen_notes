@@ -772,12 +772,17 @@ class NotesApp:
         """
         Muestra el contenido en el ScrolledText, aplicando colores según los tags.
         Si hay varios roles, colorea cada prefijo [Rol] con su color.
+        Si se está filtrando, colorea toda la línea con el tag recibido.
         """
         self.note_content_display.config(state=tk.NORMAL)
         self.note_content_display.delete(1.0, tk.END)
 
-        for line, _ in content_lines_with_tags:
-            idx = 0
+        for line, tag in content_lines_with_tags:
+            # Si estamos filtrando (el tag no es "general_text"), colorea toda la línea con ese tag
+            if tag != "general_text":
+                self.note_content_display.insert(tk.END, line + "\n", tag)
+                continue
+
             temp_line = line
             # Detectar y colorear todos los roles al inicio
             while True:
@@ -787,7 +792,6 @@ class NotesApp:
                     if temp_line.startswith(prefix):
                         self.note_content_display.insert(tk.END, prefix, role)
                         temp_line = temp_line[len(prefix):]
-                        idx += len(prefix)
                         found = True
                         break
                 if not found:
@@ -800,7 +804,6 @@ class NotesApp:
                     eisenhower_tag = "EISENHOWER_" + key
                     self.note_content_display.insert(tk.END, prefix, eisenhower_tag)
                     temp_line = temp_line[len(prefix):]
-                    idx += len(prefix)
                     break
             # El resto de la línea: color del primer rol, o Eisenhower, o general
             tag_to_apply = "general_text"
