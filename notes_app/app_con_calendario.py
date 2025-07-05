@@ -1022,7 +1022,6 @@ class MainApplication:
 
         # Abrir la ventana de notas al inicio
         self.open_notes_window()
-        self.open_calendar_window() # Opcional: Abrir también el calendario al inicio
 
     def open_notes_window(self):
         notes_root = Toplevel(self.master)
@@ -1034,6 +1033,7 @@ class MainApplication:
             self.notes_app_instance.calendar_app_instance = self.calendar_app_instance
 
         notes_root.protocol("WM_DELETE_WINDOW", self._on_notes_window_close)
+        notes_root.state('zoomed')  # Maximiza la ventana (Windows)
 
 
     def open_calendar_window(self):
