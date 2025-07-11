@@ -816,6 +816,8 @@ class NotesApp:
                     tag_to_apply = "EISENHOWER_" + d_name
             self.note_content_display.insert(tk.END, temp_line + "\n", tag_to_apply)
 
+        self.note_content_display.config(state=tk.DISABLED)
+
     def set_display_mode(self, mode):
         """
         Establece el modo de visualización para "Mostrar Todo".
