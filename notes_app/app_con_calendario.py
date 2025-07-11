@@ -1013,7 +1013,7 @@ class NotesApp:
     def open_roles_config_dialog(self):
         dialog = Toplevel(self.master)
         dialog.title("Gestión de Roles")
-        dialog.geometry("370x400")
+        dialog.geometry("400x440")
         dialog.transient(self.master)
         dialog.grab_set()
         dialog.config(bg=self.panel_bg)
@@ -1026,18 +1026,25 @@ class NotesApp:
             roles_listbox.insert(tk.END, role)
 
         entry_var = tk.StringVar()
-        entry = ttk.Entry(dialog, textvariable=entry_var)
+        entry = ttk.Entry(dialog, textvariable=entry_var, foreground="black")  # Texto negro
         entry.pack(pady=5, padx=10, fill=tk.X)
 
         color_var = tk.StringVar(value=self.fg_color)
         color_btn = ttk.Button(dialog, text="Seleccionar color", command=lambda: choose_color())
         color_btn.pack(pady=2, padx=10, fill=tk.X)
 
+        color_preview = tk.Label(dialog, text=" ", bg=color_var.get(), width=10, height=1, relief="ridge")
+        color_preview.pack(pady=2, padx=10, fill=tk.X)
+
+        def update_color_preview():
+            color_preview.config(bg=color_var.get())
+
         def choose_color():
             color_code = tkinter.colorchooser.askcolor(title="Elige un color para el rol")[1]
             if color_code:
                 color_var.set(color_code)
                 color_btn.config(text=f"Color: {color_code}")
+                update_color_preview()
 
         def add_role():
             new_role = entry_var.get().strip()
@@ -1049,6 +1056,7 @@ class NotesApp:
                 entry_var.set("")
                 color_var.set(self.fg_color)
                 color_btn.config(text="Seleccionar color")
+                update_color_preview()
                 self.refresh_roles_ui()
             else:
                 messagebox.showwarning("Rol existente", "El rol ya existe o es inválido.", parent=dialog)
@@ -1072,16 +1080,15 @@ class NotesApp:
             roles_listbox.delete(idx)
             roles_listbox.insert(idx, new_role)
             entry_var.set("")
-            color_var.set(self.fg_color)
-            color_btn.config(text="Seleccionar color")
-            # Actualiza color
+            # NO reinicies color_var ni color_btn aquí
             self.role_colors[new_role] = new_color
             if old_role in self.role_colors:
                 del self.role_colors[old_role]
-            # Actualiza filtros activos
             if old_role in self.selected_roles:
                 self.selected_roles.remove(old_role)
                 self.selected_roles.add(new_role)
+            update_color_preview()  # Previsualiza el color actual
+            color_btn.config(text=f"Color: {new_color}")  # Actualiza el texto del botón
             self.refresh_roles_ui()
 
         def delete_role():
@@ -1099,11 +1106,51 @@ class NotesApp:
                     del self.role_colors[role]
                 self.refresh_roles_ui()
 
+        def move_up():
+            sel = roles_listbox.curselection()
+            if not sel or sel[0] == 0:
+                return
+            idx = sel[0]
+            self.notes_manager.valid_roles[idx - 1], self.notes_manager.valid_roles[idx] = \
+                self.notes_manager.valid_roles[idx], self.notes_manager.valid_roles[idx - 1]
+            # Actualiza la lista visual
+            roles_listbox.delete(0, tk.END)
+            for role in self.notes_manager.valid_roles:
+                roles_listbox.insert(tk.END, role)
+            roles_listbox.selection_set(idx - 1)
+            on_select(None)
+            self.refresh_roles_ui()
+
+        def move_down():
+            sel = roles_listbox.curselection()
+            if not sel or sel[0] == len(self.notes_manager.valid_roles) - 1:
+                return
+            idx = sel[0]
+            self.notes_manager.valid_roles[idx + 1], self.notes_manager.valid_roles[idx] = \
+                self.notes_manager.valid_roles[idx], self.notes_manager.valid_roles[idx + 1]
+            # Actualiza la lista visual
+            roles_listbox.delete(0, tk.END)
+            for role in self.notes_manager.valid_roles:
+                roles_listbox.insert(tk.END, role)
+            roles_listbox.selection_set(idx + 1)
+            on_select(None)
+            self.refresh_roles_ui()
+
         btn_frame = ttk.Frame(dialog, style='TFrame')
         btn_frame.pack(pady=5)
-        ttk.Button(btn_frame, text="Añadir", command=add_role).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="Editar", command=edit_role).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="Eliminar", command=delete_role).pack(side=tk.LEFT, padx=2)
+
+        # Fila 1: Añadir, Editar, Eliminar (centrados)
+        btn_row1 = ttk.Frame(btn_frame, style='TFrame')
+        btn_row1.pack(pady=2)
+        ttk.Button(btn_row1, text="Añadir", command=add_role, width=14, style='RolesDialog.TButton').pack(side=tk.LEFT, padx=6)
+        ttk.Button(btn_row1, text="Editar", command=edit_role, width=14, style='RolesDialog.TButton').pack(side=tk.LEFT, padx=6)
+        ttk.Button(btn_row1, text="Eliminar", command=delete_role, width=14, style='RolesDialog.TButton').pack(side=tk.LEFT, padx=6)
+
+        # Fila 2: Subir y Bajar (centrados debajo)
+        btn_row2 = ttk.Frame(btn_frame, style='TFrame')
+        btn_row2.pack(pady=2)
+        ttk.Button(btn_row2, text="↑", command=move_up, width=7, style='RolesDialog.TButton').pack(side=tk.LEFT, padx=10)
+        ttk.Button(btn_row2, text="↓", command=move_down, width=7, style='RolesDialog.TButton').pack(side=tk.LEFT, padx=10)
 
         def on_select(event):
             sel = roles_listbox.curselection()
@@ -1112,9 +1159,8 @@ class NotesApp:
                 entry_var.set(role)
                 color_var.set(self.role_colors.get(role, self.fg_color))
                 color_btn.config(text=f"Color: {color_var.get()}")
+                update_color_preview()
         roles_listbox.bind("<<ListboxSelect>>", on_select)
-
-        ttk.Button(dialog, text="Cerrar", command=dialog.destroy).pack(pady=5)
 
     def refresh_roles_ui(self):
         # Limpia los botones antiguos
@@ -1137,8 +1183,8 @@ class NotesApp:
             style_name = f'Role.{role}.TButton'
             self.style.configure(style_name, background=self.panel_bg, foreground=btn_color)
             self.style.map(style_name,
-                           background=[('active', self.accent_color)],
-                           foreground=[('active', 'white')])
+                            background=[('active', self.accent_color)],
+                            foreground=[('active', 'white')])
             btn = ttk.Button(self.filter_role_frame, text=role, command=lambda r=role: self.toggle_role_filter(r),
                              style=style_name)
             btn.pack(side=tk.LEFT, padx=1)
