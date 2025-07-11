@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import json
 import hashlib
 from tkcalendar import Calendar
+import tkinter.colorchooser
 
 # --- Lógica de Notas y Calendario ---
 class NotesManager:
@@ -644,6 +645,7 @@ class NotesApp:
         ttk.Button(button_frame_left, text="Recargar", command=self.load_notes_list).pack(side=tk.TOP, fill=tk.X, pady=1)
         ttk.Button(button_frame_left, text="Nueva Nota", command=self.create_new_note).pack(side=tk.TOP, fill=tk.X, pady=1)
         ttk.Button(button_frame_left, text="Calendario", command=self.open_calendar_window).pack(side=tk.TOP, fill=tk.X, pady=3)
+        ttk.Button(button_frame_left, text="Configurar Roles", command=self.open_roles_config_dialog).pack(side=tk.TOP, fill=tk.X, pady=1)
 
         # Right Frame (Main Content Area)
         right_frame = ttk.Frame(main_pane, style='TFrame', padding=(5, 5, 5, 5))
@@ -679,7 +681,6 @@ class NotesApp:
         filter_role_frame.pack(pady=(5, 2), fill=tk.X)
         tk.Label(filter_role_frame, text="Filtrar por Rol:", font=self.font_small, bg=self.panel_bg, fg=self.fg_color).pack(side=tk.LEFT, padx=2)
 
-        # Reemplaza la creación de botones de roles
         self.role_buttons = {}
         for role in self.notes_manager.valid_roles:
             btn_color = self.role_colors.get(role, self.fg_color)
@@ -815,8 +816,6 @@ class NotesApp:
                 elif d_type == "eisenhower" and tag_to_apply == "general_text":
                     tag_to_apply = "EISENHOWER_" + d_name
             self.note_content_display.insert(tk.END, temp_line + "\n", tag_to_apply)
-
-        self.note_content_display.config(state=tk.DISABLED)
 
     def set_display_mode(self, mode):
         """
@@ -1011,6 +1010,142 @@ class NotesApp:
         else:
             self.display_content([(msg, "general_text")])
 
+    def open_roles_config_dialog(self):
+        dialog = Toplevel(self.master)
+        dialog.title("Gestión de Roles")
+        dialog.geometry("370x400")
+        dialog.transient(self.master)
+        dialog.grab_set()
+        dialog.config(bg=self.panel_bg)
+
+        tk.Label(dialog, text="Roles actuales:", bg=self.panel_bg, fg=self.fg_color, font=self.font_bold).pack(pady=5)
+
+        roles_listbox = tk.Listbox(dialog, font=self.font_normal, bg=self.text_input_bg, fg=self.fg_color, selectbackground=self.accent_color)
+        roles_listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        for role in self.notes_manager.valid_roles:
+            roles_listbox.insert(tk.END, role)
+
+        entry_var = tk.StringVar()
+        entry = ttk.Entry(dialog, textvariable=entry_var)
+        entry.pack(pady=5, padx=10, fill=tk.X)
+
+        color_var = tk.StringVar(value=self.fg_color)
+        color_btn = ttk.Button(dialog, text="Seleccionar color", command=lambda: choose_color())
+        color_btn.pack(pady=2, padx=10, fill=tk.X)
+
+        def choose_color():
+            color_code = tkinter.colorchooser.askcolor(title="Elige un color para el rol")[1]
+            if color_code:
+                color_var.set(color_code)
+                color_btn.config(text=f"Color: {color_code}")
+
+        def add_role():
+            new_role = entry_var.get().strip()
+            new_color = color_var.get()
+            if new_role and new_role not in self.notes_manager.valid_roles:
+                self.notes_manager.valid_roles.append(new_role)
+                self.role_colors[new_role] = new_color
+                roles_listbox.insert(tk.END, new_role)
+                entry_var.set("")
+                color_var.set(self.fg_color)
+                color_btn.config(text="Seleccionar color")
+                self.refresh_roles_ui()
+            else:
+                messagebox.showwarning("Rol existente", "El rol ya existe o es inválido.", parent=dialog)
+
+        def edit_role():
+            sel = roles_listbox.curselection()
+            if not sel:
+                return
+            idx = sel[0]
+            old_role = self.notes_manager.valid_roles[idx]
+            new_role = entry_var.get().strip()
+            new_color = color_var.get()
+            if not new_role:
+                messagebox.showwarning("Nombre inválido", "El nombre no puede estar vacío.", parent=dialog)
+                return
+            if new_role != old_role and new_role in self.notes_manager.valid_roles:
+                messagebox.showwarning("Rol existente", "El rol ya existe.", parent=dialog)
+                return
+            # Actualiza nombre y color
+            self.notes_manager.valid_roles[idx] = new_role
+            roles_listbox.delete(idx)
+            roles_listbox.insert(idx, new_role)
+            entry_var.set("")
+            color_var.set(self.fg_color)
+            color_btn.config(text="Seleccionar color")
+            # Actualiza color
+            self.role_colors[new_role] = new_color
+            if old_role in self.role_colors:
+                del self.role_colors[old_role]
+            # Actualiza filtros activos
+            if old_role in self.selected_roles:
+                self.selected_roles.remove(old_role)
+                self.selected_roles.add(new_role)
+            self.refresh_roles_ui()
+
+        def delete_role():
+            sel = roles_listbox.curselection()
+            if not sel:
+                return
+            idx = sel[0]
+            role = self.notes_manager.valid_roles[idx]
+            if messagebox.askyesno("Eliminar rol", f"¿Eliminar el rol '{role}'?", parent=dialog):
+                del self.notes_manager.valid_roles[idx]
+                roles_listbox.delete(idx)
+                if role in self.selected_roles:
+                    self.selected_roles.remove(role)
+                if role in self.role_colors:
+                    del self.role_colors[role]
+                self.refresh_roles_ui()
+
+        btn_frame = ttk.Frame(dialog, style='TFrame')
+        btn_frame.pack(pady=5)
+        ttk.Button(btn_frame, text="Añadir", command=add_role).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="Editar", command=edit_role).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="Eliminar", command=delete_role).pack(side=tk.LEFT, padx=2)
+
+        def on_select(event):
+            sel = roles_listbox.curselection()
+            if sel:
+                role = roles_listbox.get(sel[0])
+                entry_var.set(role)
+                color_var.set(self.role_colors.get(role, self.fg_color))
+                color_btn.config(text=f"Color: {color_var.get()}")
+        roles_listbox.bind("<<ListboxSelect>>", on_select)
+
+        ttk.Button(dialog, text="Cerrar", command=dialog.destroy).pack(pady=5)
+
+    def refresh_roles_ui(self):
+        # Limpia los botones antiguos
+        for btn in self.role_buttons.values():
+            btn.destroy()
+        self.role_buttons.clear()
+
+        # Limpia todos los widgets hijos del frame de filtros de roles (incluyendo el label)
+        for widget in self.filter_role_frame.winfo_children():
+            widget.destroy()
+
+        # Vuelve a poner el label
+        tk.Label(self.filter_role_frame, text="Filtrar por Rol:", font=self.font_small, bg=self.panel_bg, fg=self.fg_color).pack(side=tk.LEFT, padx=2)
+
+        self.selected_roles.clear()
+
+        # Crea los nuevos botones de roles en el frame correcto
+        for role in self.notes_manager.valid_roles:
+            btn_color = self.role_colors.get(role, self.fg_color)
+            style_name = f'Role.{role}.TButton'
+            self.style.configure(style_name, background=self.panel_bg, foreground=btn_color)
+            self.style.map(style_name,
+                           background=[('active', self.accent_color)],
+                           foreground=[('active', 'white')])
+            btn = ttk.Button(self.filter_role_frame, text=role, command=lambda r=role: self.toggle_role_filter(r),
+                             style=style_name)
+            btn.pack(side=tk.LEFT, padx=1)
+            self.role_buttons[role] = btn
+
+        self.show_all_content()
+
 # --- Aplicación Principal (para lanzar ambas ventanas) ---
 class MainApplication:
     def __init__(self, master):
@@ -1024,10 +1159,10 @@ class MainApplication:
 
         # Abrir la ventana de notas al inicio
         self.open_notes_window()
-        self.open_calendar_window() # Opcional: Abrir también el calendario al inicio
 
     def open_notes_window(self):
         notes_root = Toplevel(self.master)
+        notes_root.state('zoomed')
         # Pasar la instancia del calendario si ya existe
         self.notes_app_instance = NotesApp(notes_root, self.notes_manager, self.calendar_app_instance)
 
@@ -1052,14 +1187,14 @@ class MainApplication:
             calendar_root.protocol("WM_DELETE_WINDOW", self._on_calendar_window_close)
 
     def _on_notes_window_close(self):
-        if messagebox.askyesno("Salir", "¿Cerrar solo la ventana de Notas?", parent=self.notes_app_instance.master):
+        if self.notes_app_instance:
             self.notes_app_instance.master.destroy()
             self.notes_app_instance = None
         # Si ambas ventanas se cierran, salir completamente
         self._check_and_quit()
 
     def _on_calendar_window_close(self):
-        if messagebox.askyesno("Salir", "¿Cerrar solo la ventana de Calendario?", parent=self.calendar_app_instance.master):
+        if self.calendar_app_instance:
             self.calendar_app_instance.master.destroy()
             self.calendar_app_instance = None
         self._check_and_quit()
