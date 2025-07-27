@@ -1,6 +1,6 @@
 import os
 import tkinter as tk
-from tkinter import scrolledtext, messagebox, simpledialog, Toplevel, filedialog  # Asegúrate de importar filedialog
+from tkinter import scrolledtext, messagebox, simpledialog, Toplevel, filedialog
 from tkinter import ttk, PhotoImage
 from datetime import datetime, timedelta
 import json
@@ -253,6 +253,13 @@ class NotesManager:
             self._save_calendar_events()
             return True, "Evento eliminado."
         return False, "Evento no encontrado."
+        
+    def is_note_empty(self, title):
+        """Verifica si una nota está vacía (solo tiene el título o está vacía)"""
+        content, _ = self.get_note_content(title)
+        if not content or content.strip() == f"# {title}\n" or content.strip() == f"# {title}":
+            return True
+        return False
 
 # --- Interfaz Gráfica del Calendario ---
 class CalendarApp:
@@ -845,34 +852,34 @@ class NotesApp:
             return
 
         content, msg = self.notes_manager.get_note_content(self.active_note_title)
-        if content is not None:  # Cambia aquí: permite cadena vacía
-            lines = content.split('\n')
-            display_data = []
-            for line in lines:
-                detected_classifications = self.notes_manager.get_line_classification(line)
-
-                tag_to_apply = "general_text"
-
-                if self.display_mode == "role":
-                    for d_type, d_name in detected_classifications:
-                        if d_type == "role":
-                            tag_to_apply = d_name
-                            break
-                        elif d_type == "eisenhower" and tag_to_apply == "general_text":
-                            tag_to_apply = "EISENHOWER_" + d_name
-                elif self.display_mode == "eisenhower":
-                    for d_type, d_name in detected_classifications:
-                        if d_type == "eisenhower":
-                            tag_to_apply = "EISENHOWER_" + d_name
-                            break
-                        elif d_type == "role" and tag_to_apply == "general_text":
-                            tag_to_apply = d_name
-
-                display_data.append((line, tag_to_apply))
-            self.display_content(display_data)
-        else:
+        
+        if content is None:
             messagebox.showerror("Error al Cargar Nota", msg, parent=self.master)
             self.display_content([(msg, "general_text")])
+            return
+        
+        # Verificar si es una tabla guardada
+        if "<!-- TABLE-START -->" in content and "<!-- TABLE-END -->" in content:
+            self.table_content_to_load = content  # <-- Guardar contenido para cargar
+            self.setup_table_editor()
+        else:
+            # Mostrar contenido normal
+            self.display_normal_content(content)
+            
+    def display_normal_content(self, content):
+        """Muestra el contenido normal en el editor de texto"""
+        # Asegurarse de que el editor de texto esté visible
+        self.note_content_display.pack(fill=tk.BOTH, expand=True)
+        
+        # Ocultar cualquier frame de tabla si existe
+        if hasattr(self, 'table_main_frame'):
+            self.table_main_frame.pack_forget()
+        
+        # Mostrar contenido en el editor
+        self.note_content_display.config(state=tk.NORMAL)
+        self.note_content_display.delete(1.0, tk.END)
+        self.note_content_display.insert(tk.END, content)
+        self.note_content_display.config(state=tk.DISABLED)
 
     def save_current_note(self):
         if not self.active_note_title:
@@ -1193,6 +1200,367 @@ class NotesApp:
             self.role_buttons[role] = btn
 
         self.show_all_content()
+    
+    def on_note_tree_select(self, event):
+        selected = self.notes_tree.selection()
+        if selected:
+            item = self.notes_tree.item(selected[0])
+            if not item['values']:
+                self.notes_tree.selection_remove(selected[0])
+                return
+            
+            note_path = item['values'][0]
+            self.active_note_title = note_path
+            
+            if self.notes_manager.is_note_empty(note_path):
+                self.show_note_type_selection()
+            else:
+                self.show_all_content()
+
+    def show_note_type_selection(self):
+        """Muestra diálogo para seleccionar el tipo de editor para notas vacías"""
+        # Ocultar el editor actual temporalmente
+        self.note_content_display.pack_forget()
+        
+        dialog = Toplevel(self.master)
+        dialog.title("Seleccionar tipo de nota")
+        dialog.geometry("400x200")
+        dialog.transient(self.master)
+        dialog.grab_set()
+        dialog.focus_set()  # Asegurar que recibe el foco
+        
+        # Centrar el diálogo
+        self.center_window(dialog)
+        
+        dialog.config(bg=self.panel_bg)
+        
+        tk.Label(dialog, 
+                text="Esta nota está vacía. ¿Cómo quieres editarla?",
+                bg=self.panel_bg, fg=self.fg_color, 
+                font=self.font_bold).pack(pady=20)
+        
+        btn_frame = ttk.Frame(dialog, style='TFrame')
+        btn_frame.pack(pady=10)
+        
+        ttk.Button(btn_frame, text="Editor Normal",
+                  command=lambda: [dialog.destroy(), self.setup_normal_editor()]).pack(side=tk.LEFT, padx=10)
+        
+        ttk.Button(btn_frame, text="Editor de Tabla/Matriz",
+                  command=lambda: [dialog.destroy(), self.setup_table_editor()]).pack(side=tk.LEFT, padx=10)
+        
+        dialog.protocol("WM_DELETE_WINDOW", lambda: [dialog.destroy(), self.setup_normal_editor()])
+
+    def center_window(self, window):
+        """Centra una ventana en la pantalla"""
+        window.update_idletasks()
+        width = window.winfo_width()
+        height = window.winfo_height()
+        x = (window.winfo_screenwidth() // 2) - (width // 2)
+        y = (window.winfo_screenheight() // 2) - (height // 2)
+        window.geometry(f'{width}x{height}+{x}+{y}')
+
+    def setup_normal_editor(self, dialog):
+        """Configura el editor normal"""
+        dialog.destroy()
+        self.show_all_content()
+        
+    def show_table_editor(self):
+        """Muestra la interfaz de edición de tabla/matriz"""
+        # Limpiar el área de contenido actual
+        for widget in self.note_content_display.winfo_children():
+            widget.destroy()
+        
+        # Crear un frame para la tabla
+        table_frame = ttk.Frame(self.note_content_display, style='TFrame')
+        table_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Botón para añadir filas
+        add_row_btn = ttk.Button(table_frame, text="+ Añadir Fila",
+                                command=lambda: self.add_table_row(table_frame))
+        add_row_btn.pack(anchor=tk.NW, padx=5, pady=5)
+        
+        # Crear tabla inicial (2x2)
+        self.table_data = []
+        self.add_table_row(table_frame)
+        self.add_table_row(table_frame)
+        
+        # Botón para guardar
+        save_btn = ttk.Button(table_frame, text="Guardar Tabla",
+                            command=self.save_table_data)
+        save_btn.pack(anchor=tk.SE, padx=5, pady=5)
+    
+    def setup_table_editor(self):
+        """Configura el editor de tabla/matriz"""
+        # Limpiar cualquier contenido previo
+        self.clear_display()
+        
+        # Ocultar el editor de texto normal
+        self.note_content_display.pack_forget()
+        
+        # Crear frame principal para la tabla si no existe
+        if not hasattr(self, 'table_main_frame'):
+            self.table_main_frame = ttk.Frame(self.master)
+            self.setup_table_ui_components()
+        
+        # Mostrar el frame de la tabla
+        self.table_main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Cargar datos si existen
+        if hasattr(self, 'table_content_to_load'):
+            self.load_table_data(self.table_content_to_load)
+            delattr(self, 'table_content_to_load')
+        else:
+            self.create_initial_table()
+
+    def setup_table_ui_components(self):
+        """Configura los componentes UI de la tabla (se llama una sola vez)"""
+        # Frame para controles superiores
+        controls_top_frame = ttk.Frame(self.table_main_frame)
+        controls_top_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Botones de control
+        ttk.Button(controls_top_frame, text="+ Añadir Fila", command=self.add_table_row).pack(side=tk.LEFT, padx=2)
+        ttk.Button(controls_top_frame, text="- Eliminar Fila", command=self.remove_table_row).pack(side=tk.LEFT, padx=2)
+        ttk.Button(controls_top_frame, text="+ Añadir Columna", command=self.add_table_column).pack(side=tk.LEFT, padx=2)
+        ttk.Button(controls_top_frame, text="- Eliminar Columna", command=self.remove_table_column).pack(side=tk.LEFT, padx=2)
+        
+        # Frame para la tabla (con scrollbar)
+        table_container = ttk.Frame(self.table_main_frame)
+        table_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Canvas y scrollbar
+        self.table_canvas = tk.Canvas(table_container, bg=self.panel_bg)
+        scrollbar = ttk.Scrollbar(table_container, orient="vertical", command=self.table_canvas.yview)
+        self.scrollable_frame = ttk.Frame(self.table_canvas)
+        
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.table_canvas.configure(scrollregion=self.table_canvas.bbox("all"))
+        )
+        
+        self.table_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.table_canvas.configure(yscrollcommand=scrollbar.set)
+        
+        self.table_canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Frame para controles inferiores
+        controls_bottom_frame = ttk.Frame(self.table_main_frame)
+        controls_bottom_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Botón para convertir a markdown
+        ttk.Button(controls_bottom_frame, text="Convertir a Markdown", command=lambda: self.save_table_data(convert_to_md=True)).pack(side=tk.LEFT, padx=5)
+        
+        # Botón de guardar tabla
+        self.save_table_btn = ttk.Button(controls_bottom_frame, text="Guardar Tabla", command=lambda: self.save_table_data(convert_to_md=False))
+        self.save_table_btn.pack(side=tk.RIGHT, padx=5)
+
+    def create_initial_table(self):
+        """Crea la tabla inicial con 2 filas y 2 columnas"""
+        # Crear encabezados
+        header_frame = ttk.Frame(self.scrollable_frame)
+        header_frame.pack(fill=tk.X)
+        
+        self.table_headers = []
+        for col in range(self.current_columns):
+            header = ttk.Entry(header_frame)
+            header.insert(0, f"Columna {col+1}")
+            header.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=2)
+            self.table_headers.append(header)
+        
+        # Crear 2 filas iniciales
+        for _ in range(2):
+            self.add_table_row()
+
+    def add_table_row(self):
+        """Añade una nueva fila a la tabla"""
+        row_frame = ttk.Frame(self.scrollable_frame)
+        row_frame.pack(fill=tk.X)
+        
+        row_entries = []
+        for col in range(self.current_columns):
+            entry = ttk.Entry(row_frame)
+            entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=2)
+            row_entries.append(entry)
+        
+        # Botón para eliminar esta fila específica
+        del_btn = ttk.Button(row_frame, text="×", width=3,
+                            command=lambda f=row_frame: self.remove_specific_row(f))
+        del_btn.pack(side=tk.LEFT, padx=2)
+        
+        self.table_data.append((row_frame, row_entries))
+        self.update_scrollregion()
+
+    def remove_table_row(self):
+        """Elimina la última fila de la tabla"""
+        if len(self.table_data) > 0:
+            row_frame, _ = self.table_data.pop()
+            row_frame.destroy()
+            self.update_scrollregion()
+
+    def remove_specific_row(self, row_frame):
+        """Elimina una fila específica"""
+        for i, (frame, _) in enumerate(self.table_data):
+            if frame == row_frame:
+                self.table_data.pop(i)
+                frame.destroy()
+                break
+        self.update_scrollregion()
+
+    def add_table_column(self):
+        """Añade una nueva columna a la tabla"""
+        self.current_columns += 1
+        
+        # Añadir encabezado
+        new_header = ttk.Entry(self.table_headers[0].master)
+        new_header.insert(0, f"Columna {self.current_columns}")
+        new_header.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=2)
+        self.table_headers.append(new_header)
+        
+        # Añadir columna a cada fila existente
+        for _, row_entries in self.table_data:
+            new_entry = ttk.Entry(row_entries[0].master)
+            new_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=2)
+            row_entries.append(new_entry)
+        
+        self.update_scrollregion()
+
+    def remove_table_column(self):
+        """Elimina la última columna de la tabla"""
+        if self.current_columns > 1:
+            # Eliminar encabezado
+            header = self.table_headers.pop()
+            header.destroy()
+            self.current_columns -= 1
+            
+            # Eliminar columna de cada fila
+            for _, row_entries in self.table_data:
+                if len(row_entries) > 0:
+                    entry = row_entries.pop()
+                    entry.destroy()
+            
+            self.update_scrollregion()
+
+    def update_scrollregion(self):
+        """Actualiza el área de scroll del canvas"""
+        self.table_canvas.configure(scrollregion=self.table_canvas.bbox("all"))
+        # Asegurarse de que el botón de guardar siempre es visible
+        self.table_main_frame.update_idletasks()
+        self.save_table_btn.lift()
+    
+    def save_table_data(self, convert_to_md=False):
+        """Guarda los datos de la tabla en formato especial o markdown"""
+        if not self.active_note_title:
+            return
+            
+        if convert_to_md:
+            # Crear representación markdown de la tabla
+            content = f"# {self.active_note_title}\n\n"
+            
+            # Encabezados de columnas
+            headers = [h.get() for h in self.table_headers]
+            content += "| " + " | ".join(headers) + " |\n"
+            
+            # Separador de encabezados
+            content += "| " + " | ".join(["---" for _ in headers]) + " |\n"
+            
+            # Datos de la tabla
+            for _, row_entries in self.table_data:
+                row_data = [entry.get() for entry in row_entries]
+                content += "| " + " | ".join(row_data) + " |\n"
+        else:
+            # Guardar en formato especial para mantener la visualización
+            content = f"# {self.active_note_title}\n\n"
+            content += "<!-- TABLE-START -->\n"
+            content += f"<columns>{self.current_columns}</columns>\n"
+            
+            # Encabezados
+            headers = [h.get() for h in self.table_headers]
+            content += "<headers>" + "|||".join(headers) + "</headers>\n"
+            
+            # Datos
+            for _, row_entries in self.table_data:
+                row_data = [entry.get() for entry in row_entries]
+                content += "<row>" + "|||".join(row_data) + "</row>\n"
+                
+            content += "<!-- TABLE-END -->"
+        
+        # Guardar el contenido
+        self.notes_manager.save_note_content(self.active_note_title, content)
+        messagebox.showinfo("Guardar", "Tabla guardada correctamente.", parent=self.master)
+        
+        if convert_to_md:
+            # Volver al modo de visualización normal
+            self.setup_normal_editor()
+            
+    def load_table_data(self, content):
+        """Carga una tabla desde el formato especial"""
+        try:
+            # Extraer la parte de la tabla
+            table_part = content.split("<!-- TABLE-START -->")[1].split("<!-- TABLE-END -->")[0]
+            lines = [line.strip() for line in table_part.split("\n") if line.strip()]
+            
+            # Obtener número de columnas
+            cols_line = next(line for line in lines if line.startswith("<columns>"))
+            self.current_columns = int(cols_line.replace("<columns>", "").replace("</columns>", ""))
+            
+            # Obtener encabezados
+            headers_line = next(line for line in lines if line.startswith("<headers>"))
+            headers = headers_line.replace("<headers>", "").replace("</headers>", "").split("|||")
+            
+            # Limpiar la tabla existente
+            for widget in self.scrollable_frame.winfo_children():
+                widget.destroy()
+            self.table_headers = []
+            self.table_data = []
+            
+            # Crear frame para encabezados
+            header_frame = ttk.Frame(self.scrollable_frame)
+            header_frame.pack(fill=tk.X)
+            
+            # Crear encabezados
+            for header_text in headers:
+                header = ttk.Entry(header_frame)
+                header.insert(0, header_text)
+                header.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=2)
+                self.table_headers.append(header)
+            
+            # Añadir filas con datos
+            row_lines = [line for line in lines if line.startswith("<row>")]
+            for row_line in row_lines:
+                row_data = row_line.replace("<row>", "").replace("</row>", "").split("|||")
+                self.add_table_row()
+                if len(self.table_data) > 0:
+                    _, current_entries = self.table_data[-1]
+                    for i, value in enumerate(row_data):
+                        if i < len(current_entries):
+                            current_entries[i].delete(0, tk.END)
+                            current_entries[i].insert(0, value)
+            
+            self.update_scrollregion()
+        except Exception as e:
+            print(f"Error loading table: {e}")
+            # Si hay error, mostrar contenido normal
+            self.setup_normal_editor()
+            self.display_content([("Error al cargar la tabla. Mostrando contenido crudo.", "general_text")])
+            self.note_content_display.insert(tk.END, content)
+            
+    def clear_display(self):
+        """Limpia toda la visualización actual"""
+        # Limpiar editor de texto
+        self.note_content_display.config(state=tk.NORMAL)
+        self.note_content_display.delete(1.0, tk.END)
+        
+        # Ocultar frame de tabla si existe
+        if hasattr(self, 'table_main_frame'):
+            self.table_main_frame.pack_forget()
+        
+        # Destruir widgets de tabla si existen
+        if hasattr(self, 'scrollable_frame'):
+            for widget in self.scrollable_frame.winfo_children():
+                widget.destroy()
+            self.table_data = []
+            self.table_headers = []
 
 # --- Aplicación Principal (para lanzar ambas ventanas) ---
 class MainApplication:
