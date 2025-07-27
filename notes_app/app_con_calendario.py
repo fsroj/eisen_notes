@@ -571,7 +571,9 @@ class NotesApp:
             "Asistente": "#f9c74f",
             "Work-out": "#f8961e",
             "Estudiante": "#f3722c",
-            "Diseñador": "#f94144"
+            "Diseñador": "#c7275c",
+            "TLP": "#f94144",
+            "Ropa/Accesorios": "#c43333"
         }
 
         self.eisenhower_tag_colors = {
