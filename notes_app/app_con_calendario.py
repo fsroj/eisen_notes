@@ -735,6 +735,13 @@ class NotesApp:
         theme_frame.pack(pady=(0, 5), fill=tk.X)
         ttk.Button(theme_frame, text="Tema Claro", command=lambda: self.set_theme("light")).pack(side=tk.LEFT, padx=2)
         ttk.Button(theme_frame, text="Tema Oscuro", command=lambda: self.set_theme("dark")).pack(side=tk.LEFT, padx=2)
+        
+        # Configurar tags de color
+        for role, color in self.role_colors.items():
+            self.note_content_display.tag_config(role, foreground=color)
+        for tag, color in self.eisenhower_tag_colors.items():
+            self.note_content_display.tag_config(tag, foreground=color)
+        self.note_content_display.tag_config("general_text", foreground=self.fg_color)
 
     def load_notes_list(self):
         self.notes_tree.delete(*self.notes_tree.get_children())
@@ -867,7 +874,7 @@ class NotesApp:
             self.display_normal_content(content)
             
     def display_normal_content(self, content):
-        """Muestra el contenido normal en el editor de texto"""
+        """Muestra el contenido normal con resaltado de colores"""
         # Asegurarse de que el editor de texto esté visible
         self.note_content_display.pack(fill=tk.BOTH, expand=True)
         
@@ -875,11 +882,31 @@ class NotesApp:
         if hasattr(self, 'table_main_frame'):
             self.table_main_frame.pack_forget()
         
-        # Mostrar contenido en el editor
-        self.note_content_display.config(state=tk.NORMAL)
-        self.note_content_display.delete(1.0, tk.END)
-        self.note_content_display.insert(tk.END, content)
-        self.note_content_display.config(state=tk.DISABLED)
+        # Mostrar contenido con resaltado
+        lines = content.split('\n')
+        display_data = []
+        for line in lines:
+            detected_classifications = self.notes_manager.get_line_classification(line)
+            tag_to_apply = "general_text"
+            
+            if self.display_mode == "role":
+                for d_type, d_name in detected_classifications:
+                    if d_type == "role":
+                        tag_to_apply = d_name
+                        break
+                    elif d_type == "eisenhower" and tag_to_apply == "general_text":
+                        tag_to_apply = "EISENHOWER_" + d_name
+            elif self.display_mode == "eisenhower":
+                for d_type, d_name in detected_classifications:
+                    if d_type == "eisenhower":
+                        tag_to_apply = "EISENHOWER_" + d_name
+                        break
+                    elif d_type == "role" and tag_to_apply == "general_text":
+                        tag_to_apply = d_name
+            
+            display_data.append((line, tag_to_apply))
+        
+        self.display_content(display_data)
 
     def save_current_note(self):
         if not self.active_note_title:
@@ -1018,6 +1045,55 @@ class NotesApp:
                 self.display_content([("No se encontraron líneas para los filtros seleccionados.", "general_text")])
         else:
             self.display_content([(msg, "general_text")])
+            
+    def display_content(self, content_lines_with_tags):
+        """Muestra el contenido en el ScrolledText, aplicando colores según los tags"""
+        self.note_content_display.config(state=tk.NORMAL)
+        self.note_content_display.delete(1.0, tk.END)
+
+        for line, tag in content_lines_with_tags:
+            # Si estamos filtrando (el tag no es "general_text"), colorea toda la línea con ese tag
+            if tag != "general_text":
+                self.note_content_display.insert(tk.END, line + "\n", tag)
+                continue
+
+            temp_line = line
+            # Detectar y colorear todos los roles al inicio
+            while True:
+                found = False
+                for role in self.notes_manager.valid_roles:
+                    prefix = f"[{role}]"
+                    if temp_line.startswith(prefix):
+                        self.note_content_display.insert(tk.END, prefix, role)
+                        temp_line = temp_line[len(prefix):]
+                        found = True
+                        break
+                if not found:
+                    break
+            
+            # Detectar y colorear la categoría Eisenhower si está presente
+            eisenhower_tag = None
+            for abbr, key in self.notes_manager.eisenhower_abbreviations.items():
+                prefix = f"[E:{abbr}]"
+                if temp_line.startswith(prefix):
+                    eisenhower_tag = "EISENHOWER_" + key
+                    self.note_content_display.insert(tk.END, prefix, eisenhower_tag)
+                    temp_line = temp_line[len(prefix):]
+                    break
+            
+            # El resto de la línea: color del primer rol, o Eisenhower, o general
+            tag_to_apply = "general_text"
+            detected = self.notes_manager.get_line_classification(line)
+            for d_type, d_name in detected:
+                if d_type == "role":
+                    tag_to_apply = d_name
+                    break
+                elif d_type == "eisenhower" and tag_to_apply == "general_text":
+                    tag_to_apply = "EISENHOWER_" + d_name
+            
+            self.note_content_display.insert(tk.END, temp_line + "\n", tag_to_apply)
+        
+        self.note_content_display.config(state=tk.DISABLED)
 
     def open_roles_config_dialog(self):
         dialog = Toplevel(self.master)
