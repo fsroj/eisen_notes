@@ -619,6 +619,7 @@ class NotesApp:
 
         self.selected_roles = set()
         self.selected_eisenhowers = set()
+        self.selected_task_types = set()
         self.theme_mode = "dark"
 
         self.setup_ui()
@@ -762,8 +763,19 @@ class NotesApp:
         task_type_frame.pack(pady=(0, 5), fill=tk.X)
         tk.Label(task_type_frame, text="Filtrar por tipo:", font=self.font_small, bg=self.panel_bg, fg=self.fg_color).pack(side=tk.LEFT, padx=2)
 
-        for type_name in self.notes_manager.task_types.keys():
-            ttk.Button(task_type_frame, text=type_name, command=lambda name=type_name: self.filter_notes_by_task_type(name)).pack(side=tk.LEFT, padx=2)
+        # En la sección de botones de tipo de tarea:
+        for type_key, type_name in self.notes_manager.task_types.items():
+            btn = ttk.Button(
+                task_type_frame, 
+                text=type_name,
+                command=lambda tk=type_key: self.filter_notes_by_task_type(tk)
+            )
+            btn.pack(side=tk.LEFT, padx=2)
+            # Añade estilo para los botones activos
+            style_name = f'TaskType.{type_key}.TButton'
+            self.style.configure(style_name, 
+                                foreground=self.task_type_colors[f"TASK_TYPE_{type_key}"])
+            btn.configure(style=style_name)
 
         # --- Botones para cambiar tema ---
         theme_frame = ttk.Frame(right_frame, style='TFrame')
@@ -779,18 +791,13 @@ class NotesApp:
         self.note_content_display.tag_config("general_text", foreground=self.fg_color)
 
     def filter_notes_by_task_type(self, task_type):
-        if self.active_note_title:
-            filtered_lines_with_tags, msg = self.notes_manager.filter_note_by_classification(self.active_note_title, "task_type", task_type)
-            if filtered_lines_with_tags:
-                self.note_content_display.delete("1.0", tk.END)
-                for line, tag in filtered_lines_with_tags:
-                    self.note_content_display.insert(tk.END, f"{line}\n")
-                    self.apply_formatting(line, tag)
-            else:
-                self.note_content_display.delete("1.0", tk.END)
-                self.note_content_display.insert(tk.END, msg)
+        """Filtra las líneas por tipo de tarea y maneja la selección/deselección"""
+        if task_type in self.selected_task_types:
+            self.selected_task_types.remove(task_type)
         else:
-            messagebox.showinfo("Filtrar por Tipo", "Selecciona una nota primero.")
+            self.selected_task_types.add(task_type)
+        
+        self.apply_role_filters()  # Reutiliza la lógica de filtrado principal
 
     def load_notes_list(self):
         self.notes_tree.delete(*self.notes_tree.get_children())
@@ -871,6 +878,14 @@ class NotesApp:
                     self.note_content_display.insert(tk.END, prefix, eisenhower_tag)
                     temp_line = temp_line[len(prefix):]
                     break
+            # Detectar y colorear el tipo de tarea si está presente
+            task_type_tag = None
+            for prefix, key in self.notes_manager.task_type_prefixes_map.items():
+                if temp_line.startswith(prefix):
+                    task_type_tag = "TASK_TYPE_" + key
+                    self.note_content_display.insert(tk.END, prefix, task_type_tag)
+                    temp_line = temp_line[len(prefix):]
+                    break        
             # El resto de la línea: color del primer rol, o Eisenhower, o general
             tag_to_apply = "general_text"
             detected = self.notes_manager.get_line_classification(line)
@@ -1068,32 +1083,54 @@ class NotesApp:
         if not self.active_note_title:
             self.display_content([("Selecciona una nota para ver su contenido.", "general_text")])
             return
-        if not self.selected_roles and not self.selected_eisenhowers:
+        
+        # Si no hay filtros aplicados, mostrar todo
+        if not self.selected_roles and not self.selected_eisenhowers and not self.selected_task_types:
             self.show_all_content()
             return
+        
         content, msg = self.notes_manager.get_note_content(self.active_note_title)
-        if content:
-            lines = content.split('\n')
-            display_data = []
-            for line in lines:
-                detected_classifications = self.notes_manager.get_line_classification(line)
-                matched = False
-                for d_type, d_name in detected_classifications:
-                    if d_type == "role" and d_name in self.selected_roles:
-                        display_data.append((line, d_name))
-                        matched = True
-                        break
-                    elif d_type == "eisenhower" and d_name in self.selected_eisenhowers:
-                        display_data.append((line, "EISENHOWER_" + d_name))
-                        matched = True
-                        break
-                # Si quieres mostrar líneas generales cuando no hay match, omite este else
-            if display_data:
-                self.display_content(display_data)
-            else:
-                self.display_content([("No se encontraron líneas para los filtros seleccionados.", "general_text")])
-        else:
+        if not content:
             self.display_content([(msg, "general_text")])
+            return
+        
+        lines = content.split('\n')
+        display_data = []
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            classifications = self.notes_manager.get_line_classification(line)
+            matched = False
+            
+            # Verificar si coincide con algún filtro activo
+            for cls_type, cls_name in classifications:
+                if (cls_type == "role" and cls_name in self.selected_roles) or \
+                   (cls_type == "eisenhower" and cls_name in self.selected_eisenhowers) or \
+                   (cls_type == "task_type" and cls_name in self.selected_task_types):
+                    
+                    # Determinar el tag apropiado para el resaltado
+                    if cls_type == "role":
+                        tag = cls_name
+                    elif cls_type == "eisenhower":
+                        tag = f"EISENHOWER_{cls_name}"
+                    elif cls_type == "task_type":
+                        tag = f"TASK_TYPE_{cls_name}"
+                    
+                    display_data.append((line, tag))
+                    matched = True
+                    break
+            
+            # Si no coincide con ningún filtro pero es texto general y no hay filtros estrictos
+            if not matched and any(cls_type == "general_text" for cls_type, _ in classifications):
+                display_data.append((line, "general_text"))
+        
+        if display_data:
+            self.display_content(display_data)
+        else:
+            self.display_content([("No hay coincidencias con los filtros aplicados.", "general_text")])
             
     def display_content(self, content_lines_with_tags):
         """Muestra el contenido en el ScrolledText, aplicando colores según los tags"""
