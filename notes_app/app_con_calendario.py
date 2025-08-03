@@ -590,31 +590,30 @@ class NotesApp:
             self.style.theme_use('alt')
 
         self.role_colors = {
-            "Programador": "#D270DB",
-            "Social": "#00bcd4",
-            "Tesista": "#43aa8b",
-            "General": "#90be6d",
-            "Asistente": "#f9c74f",
-            "Work-out": "#f8961e",
-            "Estudiante": "#f3722c",
-            "Trabajo": "#f3722c",
-            "Diseñador": "#c7275c",
-            "TLP": "#f94144",
-            "Ropa/Accesorios": "#c43333"
+        "TLP": "#FF5252",        # Rojo neón suavizado
+        "Trabajo": "#FF7F50",    # Coral eléctrico
+        "Diseñador": "#FF8C69",  # Salmón neón
+        "Asistente": "#FFD700",  # Amarillo oro
+        "Work-out": "#7FFFD4",   # Agua marina
+        "Tesista": "#00CED1",    # Verde-azul turquesa
+        "Programador": "#20B2AA", # Verde marino
+        "Social": "#1E90FF",     # Azul dodger
+        "General": "#00BFFF",    # Azul cielo profundo
+        "Ropa/Accesorios": "#BA55D3", # Orquídea media
+        "Estudiante": "#DA70D6"  # Orquídea pastel
         }
 
         self.eisenhower_tag_colors = {
-            "EISENHOWER_HACER_AHORA": "#FF6B6B",
-            "EISENHOWER_PLANIFICAR": "#6B9BFF",
-            "EISENHOWER_DELEGAR": "#FFB86B",
-            "EISENHOWER_ELIMINAR": "#A0A0A0"
+        "EISENHOWER_HACER_AHORA": "#FF6B6B",    # Rojo pastel intenso
+        "EISENHOWER_PLANIFICAR":  "#4ECDC4",     # Verde azulado vibrante pastel
+        "EISENHOWER_DELEGAR": "#FFA07A",        # Salmón pastel suave
+        "EISENHOWER_ELIMINAR": "#C0C0C0"        # Gris plata
         }
-        
-        # DICCIONARIO DE COLORES PARA LAS ETIQUETAS DE TIPO
+
         self.task_type_colors = {
-            "TASK_TYPE_IDEA": "#FFD700",    # Dorado
-            "TASK_TYPE_TAREA": "#32CD32",     # Verde lima
-            "TASK_TYPE_PROYECTO": "#DC143C"   # Rojo carmesí
+        "TASK_TYPE_IDEA": "#FF8C00",      # Naranja oscuro (#FF8C00) - Inspiración cálida  
+        "TASK_TYPE_TAREA": "#FF1493",     # Rosa profundo (#FF1493) - ¡Hazlo ya!  
+        "TASK_TYPE_PROYECTO": "#00BFFF"   # Azul cielo (#00BFFF) - Visión amplia  
         }
 
         self.selected_roles = set()
