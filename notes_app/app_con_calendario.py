@@ -15,7 +15,7 @@ class NotesManager:
         os.makedirs(self.notes_dir, exist_ok=True)
         self.calendar_file = calendar_file
 
-        self.valid_roles = ["Programador", "Social", "Tesista", "General", "Asistente", "Work-out", "Estudiante", "Diseñador", "TLP", "Ropa/Accesorios"]
+        self.valid_roles = ["Programador", "Social", "Tesista", "General", "Asistente", "Work-out", "Estudiante", "Trabajo", "Diseñador", "TLP", "Ropa/Accesorios"]
         self.eisenhower_categories = {
             "HACER_AHORA": "Urgente e Importante",
             "PLANIFICAR": "Importante, no Urgente",
@@ -29,6 +29,14 @@ class NotesManager:
             "E": "ELIMINAR"
         }
         self.eisenhower_prefixes_map = {f"[E:{k}]": v for k, v in self.eisenhower_abbreviations.items()}
+        
+        # Tipos de etiquetas para clasificar la naturaleza de la línea
+        self.task_types = {
+            "IDEA": "Idea",
+            "PROYECTO": "Proyecto",
+            "TAREA": "Tarea"
+        }
+        self.task_type_prefixes_map = {f"[T:{k}]": v for k, v in self.task_types.items()}
 
         self.calendar_events = self._load_calendar_events()
 
@@ -126,10 +134,17 @@ class NotesManager:
                     found_role = True
                     break
 
-        # Solo una categoría Eisenhower por línea (puedes cambiar esto si quieres varias)
+        # Solo una categoría Eisenhower por línea
         for prefix, key in self.eisenhower_prefixes_map.items():
             if remaining_line.startswith(prefix):
                 classifications.append(("eisenhower", key))
+                remaining_line = remaining_line[len(prefix):].strip()
+                break
+                
+        # LÓGICA PARA TIPO DE TAREA
+        for prefix, key in self.task_type_prefixes_map.items():
+            if remaining_line.startswith(prefix):
+                classifications.append(("task_type", key))
                 remaining_line = remaining_line[len(prefix):].strip()
                 break
 
@@ -166,6 +181,10 @@ class NotesManager:
                 elif detected_type == "eisenhower" and detected_name == classification_name and classification_type == "eisenhower":
                     found_match = True
                     primary_tag_to_display = "EISENHOWER_" + detected_name
+                    break
+                elif detected_type == "task_type" and detected_name == classification_name and classification_type == "task_type":
+                    found_match = True
+                    primary_tag_to_display = "TASK_TYPE_" + detected_name
                     break
                 elif detected_type == "general_text":
                     primary_tag_to_display = "general_text"
@@ -578,6 +597,7 @@ class NotesApp:
             "Asistente": "#f9c74f",
             "Work-out": "#f8961e",
             "Estudiante": "#f3722c",
+            "Trabajo": "#f3722c",
             "Diseñador": "#c7275c",
             "TLP": "#f94144",
             "Ropa/Accesorios": "#c43333"
@@ -588,6 +608,13 @@ class NotesApp:
             "EISENHOWER_PLANIFICAR": "#6B9BFF",
             "EISENHOWER_DELEGAR": "#FFB86B",
             "EISENHOWER_ELIMINAR": "#A0A0A0"
+        }
+        
+        # DICCIONARIO DE COLORES PARA LAS ETIQUETAS DE TIPO
+        self.task_type_colors = {
+            "TASK_TYPE_IDEA": "#FFD700",    # Dorado
+            "TASK_TYPE_TAREA": "#32CD32",     # Verde lima
+            "TASK_TYPE_PROYECTO": "#DC143C"   # Rojo carmesí
         }
 
         self.selected_roles = set()
@@ -729,6 +756,14 @@ class NotesApp:
             self.eisenhower_buttons[category_key] = btn
 
         ttk.Button(filter_eisenhower_frame, text="Ejemplo", command=self.show_eisenhower_example).pack(side=tk.LEFT, padx=2)
+        
+        # Frame para los botones de filtrado por tipo de tarea
+        task_type_frame = ttk.Frame(right_frame, style='TFrame')
+        task_type_frame.pack(pady=(0, 5), fill=tk.X)
+        tk.Label(task_type_frame, text="Filtrar por tipo:", font=self.font_small, bg=self.panel_bg, fg=self.fg_color).pack(side=tk.LEFT, padx=2)
+
+        for type_name in self.notes_manager.task_types.keys():
+            ttk.Button(task_type_frame, text=type_name, command=lambda name=type_name: self.filter_notes_by_task_type(name)).pack(side=tk.LEFT, padx=2)
 
         # --- Botones para cambiar tema ---
         theme_frame = ttk.Frame(right_frame, style='TFrame')
@@ -742,6 +777,20 @@ class NotesApp:
         for tag, color in self.eisenhower_tag_colors.items():
             self.note_content_display.tag_config(tag, foreground=color)
         self.note_content_display.tag_config("general_text", foreground=self.fg_color)
+
+    def filter_notes_by_task_type(self, task_type):
+        if self.active_note_title:
+            filtered_lines_with_tags, msg = self.notes_manager.filter_note_by_classification(self.active_note_title, "task_type", task_type)
+            if filtered_lines_with_tags:
+                self.note_content_display.delete("1.0", tk.END)
+                for line, tag in filtered_lines_with_tags:
+                    self.note_content_display.insert(tk.END, f"{line}\n")
+                    self.apply_formatting(line, tag)
+            else:
+                self.note_content_display.delete("1.0", tk.END)
+                self.note_content_display.insert(tk.END, msg)
+        else:
+            messagebox.showinfo("Filtrar por Tipo", "Selecciona una nota primero.")
 
     def load_notes_list(self):
         self.notes_tree.delete(*self.notes_tree.get_children())
