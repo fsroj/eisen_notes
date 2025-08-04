@@ -694,9 +694,26 @@ class NotesApp:
         self.gutter_canvas = None
         self.gutter_visible = False
         self.current_line_roles = {}
+        
+        self.right_frame = None
 
         self.setup_ui()
         self.load_notes_list()
+        
+    def toggle_scrollbar(self, *args):
+        """Muestra u oculta la scrollbar según sea necesario"""
+        content = self.note_content_display.get(1.0, tk.END)
+        line_count = int(self.note_content_display.index('end-1c').split('.')[0])
+        visible_lines = self.note_content_display.winfo_height() // self.note_content_display.dlineinfo("@0,0")[3]
+        
+        # Mostrar scrollbar solo si hay más líneas que las visibles
+        if line_count > visible_lines:
+            self.note_content_display.configure(yscrollcommand=self.note_content_display.yview)
+        else:
+            self.note_content_display.configure(yscrollcommand=None)
+        
+        # Actualizar gutter
+        self.update_gutter()
     
     def set_theme(self, theme_mode):
         """Configura el tema claro/oscuro de la aplicación"""
@@ -740,36 +757,23 @@ class NotesApp:
 
         self.master.config(bg=self.bg_color)
 
-        self.style.configure('.', background=self.bg_color, foreground=self.fg_color)
+        self.style.configure('.', background=self.bg_color, foreground=self.fg_color, font=self.font_normal)
         self.style.configure('TFrame', background=self.panel_bg)
         self.style.configure('TButton',
-                             background=self.panel_bg,
-                             foreground=self.fg_color,
-                             borderwidth=0,
-                             focusthickness=0,
-                             relief="flat",
-                             padding=[5, 2])
-        self.style.map('TButton',
-                        background=[('active', self.accent_color)],
-                        foreground=[('active', 'white')])
-        
-        # Configuración específica del Treeview
-        self.style.configure("Treeview", 
-                            background=self.text_input_bg,
-                            foreground=self.fg_color,
-                            fieldbackground=self.text_input_bg,
-                            borderwidth=0)
-        self.style.configure("Treeview.Heading",
                             background=self.panel_bg,
                             foreground=self.fg_color,
-                            relief="flat")
-        self.style.map('Treeview', 
-                      background=[('selected', self.accent_color)],
-                      foreground=[('selected', 'white')])
+                            borderwidth=0,
+                            focusthickness=0,
+                            relief="flat",
+                            padding=[5, 2])
+        self.style.map('TButton',
+                       background=[('active', self.accent_color)],
+                       foreground=[('active', 'white')])
 
         main_pane = tk.PanedWindow(self.master, orient=tk.HORIZONTAL, bg=self.bg_color, sashrelief=tk.RAISED)
         main_pane.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
+        # Panel izquierdo (lista de notas)
         left_frame = ttk.Frame(main_pane, style='TFrame', padding=(5, 5, 5, 5))
         main_pane.add(left_frame, width=300)
 
@@ -778,7 +782,7 @@ class NotesApp:
         self.notes_tree = ttk.Treeview(left_frame, show="tree", selectmode="browse")
         self.notes_tree.pack(pady=2, fill=tk.BOTH, expand=True)
         self.notes_tree.bind("<<TreeviewSelect>>", self.on_note_tree_select)
-    
+
         button_frame_left = ttk.Frame(left_frame, style='TFrame')
         button_frame_left.pack(fill=tk.X, pady=3)
         ttk.Button(button_frame_left, text="Recargar", command=self.load_notes_list).pack(side=tk.TOP, fill=tk.X, pady=1)
@@ -786,33 +790,51 @@ class NotesApp:
         ttk.Button(button_frame_left, text="Calendario", command=self.open_calendar_window).pack(side=tk.TOP, fill=tk.X, pady=3)
         ttk.Button(button_frame_left, text="Configurar Roles", command=self.open_roles_config_dialog).pack(side=tk.TOP, fill=tk.X, pady=1)
 
-        # Right Frame (Main Content Area)
-        right_frame = ttk.Frame(main_pane, style='TFrame', padding=(5, 5, 5, 5))
-        main_pane.add(right_frame)
+        # Panel derecho (contenido de notas)
+        self.right_frame = ttk.Frame(main_pane, style='TFrame', padding=(5, 5, 5, 5))
+        main_pane.add(self.right_frame)
 
-        # Controles superiores (se mantienen igual)
-        show_all_frame = ttk.Frame(right_frame, style='TFrame')
+        # Controles superiores
+        show_all_frame = ttk.Frame(self.right_frame, style='TFrame')
         show_all_frame.pack(pady=(0, 5), fill=tk.X)
         tk.Label(show_all_frame, text="Mostrar Todo:", font=self.font_small, bg=self.panel_bg, fg=self.fg_color).pack(side=tk.LEFT, padx=2)
         ttk.Button(show_all_frame, text="Rol", command=lambda: self.set_display_mode("role")).pack(side=tk.LEFT, padx=2)
         ttk.Button(show_all_frame, text="Eisenhower", command=lambda: self.set_display_mode("eisenhower")).pack(side=tk.LEFT, padx=2)
 
-        tk.Label(right_frame, text="Contenido de la Nota", font=("Helvetica Neue", 11, "bold"), bg=self.panel_bg, fg=self.fg_color).pack(pady=(0, 5))
+        tk.Label(self.right_frame, text="Contenido de la Nota", font=("Helvetica Neue", 11, "bold"), bg=self.panel_bg, fg=self.fg_color).pack(pady=(0, 5))
 
-        # Área de contenido principal
-        self.text_container = ttk.Frame(right_frame)
+        # Contenedor principal para texto y gutter
+        self.text_container = ttk.Frame(self.right_frame)
         self.text_container.pack(pady=2, fill=tk.BOTH, expand=True)
 
-        # Crear el ScrolledText PRIMERO
-        self.note_content_display = scrolledtext.ScrolledText(self.text_container, wrap=tk.WORD, font=self.font_code,
-                                                           bg=self.text_input_bg, fg=self.fg_color,
-                                                           insertbackground=self.fg_color,
-                                                           highlightbackground=self.border_color, highlightthickness=1,
-                                                           bd=0, relief="flat", padx=5, pady=5)
-        self.note_content_display.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Configurar el gutter primero (izquierda)
+        self.gutter_frame = tk.Frame(self.text_container, width=30, bg=self.panel_bg)
+        self.gutter_frame.pack(side=tk.LEFT, fill=tk.Y)
 
-        # Luego configurar el gutter
-        self.setup_gutter()
+        self.gutter_canvas = tk.Canvas(self.gutter_frame, 
+                                     bg=self.panel_bg, 
+                                     width=30,
+                                     highlightthickness=0,
+                                     bd=0)
+        self.gutter_canvas.pack(fill=tk.BOTH, expand=True)
+
+        # Configurar el editor de texto con scroll
+        self.note_content_display = scrolledtext.ScrolledText(
+            self.text_container,
+            wrap=tk.WORD,
+            font=self.font_code,
+            bg=self.text_input_bg,
+            fg=self.fg_color,
+            insertbackground=self.fg_color,
+            highlightbackground=self.border_color,
+            highlightthickness=1,
+            bd=0,
+            relief="flat",
+            padx=5,
+            pady=5,
+            yscrollcommand=self.toggle_scrollbar
+        )
+        self.note_content_display.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         # Configurar tags de color
         for role, color in self.role_colors.items():
@@ -821,12 +843,27 @@ class NotesApp:
             self.note_content_display.tag_config(tag, foreground=color)
         self.note_content_display.tag_config("general_text", foreground=self.fg_color)
 
-        # Resto de la interfaz
-        ttk.Button(right_frame, text="Guardar", command=self.save_current_note).pack(pady=2, fill=tk.X)
-        ttk.Button(right_frame, text="Programar en Calendario", command=self.schedule_task_in_calendar).pack(pady=2, fill=tk.X)
+        # Configurar eventos de scroll sincronizados
+        self.note_content_display.bind("<MouseWheel>", self.sync_scroll)
+        self.note_content_display.bind("<Button-4>", self.sync_scroll)
+        self.note_content_display.bind("<Button-5>", self.sync_scroll)
+        self.gutter_canvas.bind("<MouseWheel>", self.sync_scroll)
+        self.gutter_canvas.bind("<Button-4>", self.sync_scroll)
+        self.gutter_canvas.bind("<Button-5>", self.sync_scroll)
 
-        # Filter Frames
-        filter_role_frame = ttk.Frame(right_frame, style='TFrame')
+        # Configurar eventos para actualizar el gutter
+        self.note_content_display.bind("<Configure>", self.update_gutter)
+        self.note_content_display.bind("<Key>", lambda e: self.master.after(10, self.update_gutter))
+        self.note_content_display.bind("<ButtonRelease-1>", self.update_gutter)
+
+        self.gutter_visible = True
+
+        # Botones inferiores
+        ttk.Button(self.right_frame, text="Guardar", command=self.save_current_note).pack(pady=2, fill=tk.X)
+        ttk.Button(self.right_frame, text="Programar en Calendario", command=self.schedule_task_in_calendar).pack(pady=2, fill=tk.X)
+
+        # Filtros por rol
+        filter_role_frame = ttk.Frame(self.right_frame, style='TFrame')
         filter_role_frame.pack(pady=(5, 2), fill=tk.X)
         tk.Label(filter_role_frame, text="Filtrar por Rol:", font=self.font_small, bg=self.panel_bg, fg=self.fg_color).pack(side=tk.LEFT, padx=2)
 
@@ -836,17 +873,19 @@ class NotesApp:
             style_name = f'Role.{role}.TButton'
             self.style.configure(style_name, background=self.panel_bg, foreground=btn_color)
             self.style.map(style_name,
-                            background=[('active', self.accent_color)],
-                            foreground=[('active', 'white')])
+                          background=[('active', self.accent_color)],
+                          foreground=[('active', 'white')])
             btn = ttk.Button(filter_role_frame, text=role, command=lambda r=role: self.toggle_role_filter(r),
-                             style=style_name)
+                            style=style_name)
             btn.pack(side=tk.LEFT, padx=1)
             self.role_buttons[role] = btn
 
-        filter_eisenhower_frame = ttk.Frame(right_frame, style='TFrame')
+        # Filtros Eisenhower
+        filter_eisenhower_frame = ttk.Frame(self.right_frame, style='TFrame')
         filter_eisenhower_frame.pack(pady=2, fill=tk.X)
         tk.Label(filter_eisenhower_frame, text="Filtrar Eisenhower:", font=self.font_small, bg=self.panel_bg, fg=self.fg_color).pack(side=tk.LEFT, padx=2)
 
+        self.eisenhower_buttons = {}
         for abbr, category_key in self.notes_manager.eisenhower_abbreviations.items():
             category_name = self.notes_manager.eisenhower_categories[category_key]
             btn_text = f"{category_name.split(',')[0]} (E:{abbr})"
@@ -855,52 +894,34 @@ class NotesApp:
             style_name = f'Eisenhower.{category_key}.TButton'
             self.style.configure(style_name, background=self.panel_bg, foreground=btn_color)
             self.style.map(style_name,
-                            background=[('active', self.accent_color)],
-                            foreground=[('active', 'white')])
-            btn = ttk.Button(
-                filter_eisenhower_frame,
-                text=btn_text,
-                command=lambda c=category_key: self.toggle_eisenhower_filter(c),
-                style=style_name
-            )
+                          background=[('active', self.accent_color)],
+                          foreground=[('active', 'white')])
+            btn = ttk.Button(filter_eisenhower_frame, text=btn_text,
+                            command=lambda c=category_key: self.toggle_eisenhower_filter(c),
+                            style=style_name)
             btn.pack(side=tk.LEFT, padx=1)
-            if not hasattr(self, 'eisenhower_buttons'):
-                self.eisenhower_buttons = {}
             self.eisenhower_buttons[category_key] = btn
 
         ttk.Button(filter_eisenhower_frame, text="Ejemplo", command=self.show_eisenhower_example).pack(side=tk.LEFT, padx=2)
-        
-        # Frame para los botones de filtrado por tipo de tarea
-        task_type_frame = ttk.Frame(right_frame, style='TFrame')
+
+        # Filtros por tipo de tarea
+        task_type_frame = ttk.Frame(self.right_frame, style='TFrame')
         task_type_frame.pack(pady=(0, 5), fill=tk.X)
         tk.Label(task_type_frame, text="Filtrar por tipo:", font=self.font_small, bg=self.panel_bg, fg=self.fg_color).pack(side=tk.LEFT, padx=2)
 
-        # En la sección de botones de tipo de tarea:
         for type_key, type_name in self.notes_manager.task_types.items():
-            btn = ttk.Button(
-                task_type_frame, 
-                text=type_name,
-                command=lambda tk=type_key: self.filter_notes_by_task_type(tk)
-            )
+            btn = ttk.Button(task_type_frame, text=type_name,
+                            command=lambda tk=type_key: self.filter_notes_by_task_type(tk))
             btn.pack(side=tk.LEFT, padx=2)
-            # Añade estilo para los botones activos
             style_name = f'TaskType.{type_key}.TButton'
-            self.style.configure(style_name, 
-                                foreground=self.task_type_colors[f"TASK_TYPE_{type_key}"])
+            self.style.configure(style_name, foreground=self.task_type_colors[f"TASK_TYPE_{type_key}"])
             btn.configure(style=style_name)
 
-        # --- Botones para cambiar tema ---
-        theme_frame = ttk.Frame(right_frame, style='TFrame')
+        # Selector de tema
+        theme_frame = ttk.Frame(self.right_frame, style='TFrame')
         theme_frame.pack(pady=(0, 5), fill=tk.X)
         ttk.Button(theme_frame, text="Tema Claro", command=lambda: self.set_theme("light")).pack(side=tk.LEFT, padx=2)
         ttk.Button(theme_frame, text="Tema Oscuro", command=lambda: self.set_theme("dark")).pack(side=tk.LEFT, padx=2)
-        
-        # Configurar tags de color
-        for role, color in self.role_colors.items():
-            self.note_content_display.tag_config(role, foreground=color)
-        for tag, color in self.eisenhower_tag_colors.items():
-            self.note_content_display.tag_config(tag, foreground=color)
-        self.note_content_display.tag_config("general_text", foreground=self.fg_color)
 
     def update_scroll_visibility(self, *args):
         content = self.note_content_display.get(1.0, tk.END)
@@ -921,46 +942,70 @@ class NotesApp:
             self.apply_role_filters()  # Reutiliza la lógica de filtrado principal
         
     def setup_gutter(self):
+        """Configura el área del gutter para mostrar las viñetas de roles"""
         if hasattr(self, 'gutter_frame') and self.gutter_frame:
             self.gutter_frame.destroy()
 
-        self.note_content_display.pack_forget()
-        
+        if not hasattr(self, 'text_container') or not hasattr(self, 'right_frame'):
+            return
+
+        # Asegurarse de que el editor de texto esté empaquetado correctamente
+        if hasattr(self, 'note_content_display'):
+            self.note_content_display.pack_forget()
+
+        # Crear gutter primero (izquierda)
         self.gutter_frame = tk.Frame(self.text_container, width=30, bg=self.panel_bg)
         self.gutter_frame.pack(side=tk.LEFT, fill=tk.Y)
-        
-        self.gutter_canvas = tk.Canvas(self.gutter_frame, bg=self.panel_bg, width=30, 
-                                     highlightthickness=0, bd=0)
+
+        self.gutter_canvas = tk.Canvas(self.gutter_frame, 
+                                     bg=self.panel_bg, 
+                                     width=30,
+                                     highlightthickness=0,
+                                     bd=0)
         self.gutter_canvas.pack(fill=tk.BOTH, expand=True)
-        
-        self.note_content_display.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
+
+        # Volver a empaquetar el editor de texto
+        if hasattr(self, 'note_content_display'):
+            self.note_content_display.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        else:
+            self.note_content_display = scrolledtext.ScrolledText(
+                self.text_container,
+                wrap=tk.WORD,
+                font=self.font_code,
+                bg=self.text_input_bg,
+                fg=self.fg_color,
+                insertbackground=self.fg_color,
+                highlightbackground=self.border_color,
+                highlightthickness=1,
+                bd=0,
+                relief="flat",
+                padx=5,
+                pady=5,
+                yscrollcommand=self.toggle_scrollbar
+            )
+            self.note_content_display.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Configurar eventos de scroll sincronizados
         self.note_content_display.bind("<MouseWheel>", self.sync_scroll)
         self.note_content_display.bind("<Button-4>", self.sync_scroll)
         self.note_content_display.bind("<Button-5>", self.sync_scroll)
         self.gutter_canvas.bind("<MouseWheel>", self.sync_scroll)
         self.gutter_canvas.bind("<Button-4>", self.sync_scroll)
         self.gutter_canvas.bind("<Button-5>", self.sync_scroll)
-        
+
+        # Configurar eventos para actualizar el gutter
         self.note_content_display.bind("<Configure>", self.update_gutter)
         self.note_content_display.bind("<Key>", lambda e: self.master.after(10, self.update_gutter))
-        
+
         self.gutter_visible = True
         self.update_gutter()
 
     def sync_scroll(self, event):
         """Sincroniza el scroll entre el texto y el gutter"""
-        if event.num == 4 or event.num == 5:  # Eventos de scroll en Linux
-            delta = -1 if event.num == 4 else 1
-        else:  # Eventos de scroll en Windows/Mac
-            delta = -1 * (event.delta // 120) if event.delta else 0
-        
-        if delta != 0:
-            if event.widget == self.note_content_display:
-                self.gutter_canvas.yview_scroll(delta, "units")
-            else:
-                self.note_content_display.yview_scroll(delta, "units")
-        
+        if event.widget == self.note_content_display:
+            self.gutter_canvas.yview_moveto(self.note_content_display.yview()[0])
+        else:
+            self.note_content_display.yview_moveto(self.gutter_canvas.yview()[0])
         self.update_gutter()
         return "break"
 
@@ -971,64 +1016,92 @@ class NotesApp:
         
         self.gutter_canvas.delete("all")
         
-        # Obtener el rango de líneas visibles
         first_visible = self.note_content_display.index("@0,0")
         last_visible = self.note_content_display.index(f"@0,{self.note_content_display.winfo_height()}")
         
         start_line = int(first_visible.split('.')[0])
         end_line = int(last_visible.split('.')[0])
         
-        # Procesar cada línea visible
         for line_num in range(start_line, end_line + 1):
             line_index = f"{line_num}.0"
             line_text = self.note_content_display.get(line_index, f"{line_num}.end")
             
-            # Obtener clasificaciones de la línea
             classifications = self.notes_manager.get_line_classification(line_text)
             roles = [name for typ, name in classifications if typ == "role"]
             
             if roles:
                 bbox = self.note_content_display.bbox(line_index)
-                if not bbox:  # Si la línea no es visible (bbox es None)
+                if not bbox:
                     continue
                     
-                y_pos = bbox[1]
-                radius = 5
-                spacing = 8
-                total_height = len(roles) * spacing
+                y_pos = bbox[1] + 5  # Ajuste vertical para centrar
+                radius = 5  # Tamaño del círculo
+                spacing = 10  # Espacio entre viñetas
+                start_x = 5  # Margen izquierdo
                 
                 for i, role in enumerate(roles):
                     color = self.role_colors.get(role, self.fg_color)
                     tag_name = f"gutter_{line_num}_{i}"
                     
+                    # Coordenadas del círculo (horizontalmente alineados)
+                    x0 = start_x + i * (radius * 2 + spacing)
+                    y0 = y_pos
+                    x1 = x0 + radius * 2
+                    y1 = y0 + radius * 2
+                    
                     # Dibujar viñeta
                     self.gutter_canvas.create_oval(
-                        15 - radius, y_pos - total_height/2 + i*spacing + radius,
-                        15 + radius, y_pos - total_height/2 + i*spacing + 3*radius,
+                        x0, y0, x1, y1,
                         fill=color, outline=color, tags=tag_name
                     )
                     
                     # Vincular evento de clic
                     self.gutter_canvas.tag_bind(tag_name, "<Button-1>", 
-                                               lambda e, r=role, l=line_num: self.apply_role_to_line(r, l))
+                                              lambda e, r=role, l=line_num: self.apply_role_to_line(r, l))
 
     def apply_role_to_line(self, role, line_num):
-        """Aplica el color del rol a toda la línea"""
+        """Aplica el color del rol a toda la línea y guarda los cambios"""
         if not self.active_note_title:
             return
         
         line_index = f"{line_num}.0"
         line_end = f"{line_num}.end"
+        line_text = self.note_content_display.get(line_index, line_end)
         
-        # Primero quitar todos los tags de roles existentes
+        # Obtener clasificaciones actuales
+        classifications = self.notes_manager.get_line_classification(line_text)
+        
+        # Quitar todos los tags de roles existentes
         for r in self.role_colors:
             self.note_content_display.tag_remove(r, line_index, line_end)
         
         # Aplicar el nuevo tag de rol
         self.note_content_display.tag_add(role, line_index, line_end)
         
-        # Guardar cambios
-        self.master.after(100, self.save_current_note)
+        # Reconstruir la línea con el nuevo rol como primer tag
+        new_line = self.rebuild_line_with_role(line_text, classifications, role)
+        
+        # Actualizar el contenido de la línea
+        self.note_content_display.delete(line_index, line_end)
+        self.note_content_display.insert(line_index, new_line)
+        self.note_content_display.tag_add(role, line_index, f"{line_num}.end")
+        
+        # Guardar cambios inmediatamente
+        self.save_current_note()
+        self.update_gutter()
+
+    def rebuild_line_with_role(self, line_text, classifications, new_role):
+        """Reconstruye la línea con el nuevo rol como primer tag"""
+        # 1. Quitar todos los roles existentes
+        for cls_type, cls_name in classifications:
+            if cls_type == "role":
+                line_text = line_text.replace(f"[{cls_name}]", "")
+        
+        # 2. Quitar espacios iniciales
+        line_text = line_text.strip()
+        
+        # 3. Añadir el nuevo rol al inicio
+        return f"[{new_role}] {line_text}"
 
     def load_notes_list(self):
         self.notes_tree.delete(*self.notes_tree.get_children())
