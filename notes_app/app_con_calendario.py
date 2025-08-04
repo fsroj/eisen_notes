@@ -564,6 +564,8 @@ class NotesApp:
         master.geometry("600x600")
 
         self.notes_manager = notes_manager
+        # Variables para la tabla
+        self.current_columns = 2  # Valor inicial para las columnas de la tabla
         self.active_note_title = None
         self.display_mode = "role"
         self.calendar_app_instance = calendar_app_instance
@@ -615,6 +617,12 @@ class NotesApp:
         "TASK_TYPE_TAREA": "#FF1493",     # Rosa profundo (#FF1493) - ¡Hazlo ya!  
         "TASK_TYPE_PROYECTO": "#00BFFF"   # Azul cielo (#00BFFF) - Visión amplia  
         }
+        
+        # Variables para el gutter
+        self.gutter_frame = None
+        self.gutter_canvas = None
+        self.gutter_visible = False
+        self.current_line_roles = {}  # Diccionario para mapear líneas a sus roles
 
         self.selected_roles = set()
         self.selected_eisenhowers = set()
@@ -701,7 +709,12 @@ class NotesApp:
                                                                insertbackground=self.fg_color,
                                                                highlightbackground=self.border_color, highlightthickness=1,
                                                                bd=0, relief="flat", padx=5, pady=5, height=10)
-        self.note_content_display.pack(pady=2, fill=tk.BOTH, expand=True)
+        # Crear un frame contenedor para el gutter y el texto
+        self.text_container = ttk.Frame(right_frame)
+        self.text_container.pack(pady=2, fill=tk.BOTH, expand=True)
+
+        # Luego llama a setup_gutter() sin parámetros
+        self.setup_gutter()
 
         for role, color in self.role_colors.items():
             self.note_content_display.tag_config(role, foreground=color)
@@ -797,6 +810,122 @@ class NotesApp:
             self.selected_task_types.add(task_type)
         
         self.apply_role_filters()  # Reutiliza la lógica de filtrado principal
+        
+    def setup_gutter(self):
+        """Configura el área del gutter para mostrar las viñetas de roles"""
+        # Destruir el gutter existente si hay uno
+        if hasattr(self, 'gutter_frame') and self.gutter_frame:
+            self.gutter_frame.destroy()
+        
+        # Crear el frame del gutter
+        self.gutter_frame = tk.Frame(self.text_container, width=30, bg=self.panel_bg)
+        self.gutter_frame.pack(side=tk.LEFT, fill=tk.Y)
+        
+        # Crear el canvas del gutter
+        self.gutter_canvas = tk.Canvas(self.gutter_frame, bg=self.panel_bg, width=30, 
+                                     highlightthickness=0, bd=0)
+        self.gutter_canvas.pack(fill=tk.BOTH, expand=True)
+        
+        # Reorganizar el área de texto
+        self.note_content_display.pack_forget()
+        self.note_content_display.pack(in_=self.text_container, side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Configurar eventos de scroll sincronizados
+        self.note_content_display.bind("<MouseWheel>", self.sync_scroll)
+        self.note_content_display.bind("<Button-4>", self.sync_scroll)  # Linux up
+        self.note_content_display.bind("<Button-5>", self.sync_scroll)  # Linux down
+        self.gutter_canvas.bind("<MouseWheel>", self.sync_scroll)
+        self.gutter_canvas.bind("<Button-4>", self.sync_scroll)
+        self.gutter_canvas.bind("<Button-5>", self.sync_scroll)
+        
+        # Actualizar el gutter cuando haya cambios
+        self.note_content_display.bind("<Configure>", self.update_gutter)
+        self.note_content_display.bind("<Key>", lambda e: self.master.after(10, self.update_gutter))
+        
+        self.gutter_visible = True
+        self.update_gutter()  # Actualizar inmediatamente
+
+    def sync_scroll(self, event):
+        """Sincroniza el scroll entre el texto y el gutter"""
+        if event.num == 4 or event.num == 5:  # Eventos de scroll en Linux
+            delta = -1 if event.num == 4 else 1
+        else:  # Eventos de scroll en Windows/Mac
+            delta = -1 * (event.delta // 120) if event.delta else 0
+        
+        if delta != 0:
+            if event.widget == self.note_content_display:
+                self.gutter_canvas.yview_scroll(delta, "units")
+            else:
+                self.note_content_display.yview_scroll(delta, "units")
+        
+        self.update_gutter()
+        return "break"
+
+    def update_gutter(self, event=None):
+        """Actualiza las viñetas en el gutter basado en el contenido visible"""
+        if not self.gutter_visible or not self.gutter_canvas:
+            return
+        
+        self.gutter_canvas.delete("all")
+        
+        # Obtener el rango de líneas visibles
+        first_visible = self.note_content_display.index("@0,0")
+        last_visible = self.note_content_display.index(f"@0,{self.note_content_display.winfo_height()}")
+        
+        start_line = int(first_visible.split('.')[0])
+        end_line = int(last_visible.split('.')[0])
+        
+        # Procesar cada línea visible
+        for line_num in range(start_line, end_line + 1):
+            line_index = f"{line_num}.0"
+            line_text = self.note_content_display.get(line_index, f"{line_num}.end")
+            
+            # Obtener clasificaciones de la línea
+            classifications = self.notes_manager.get_line_classification(line_text)
+            roles = [name for typ, name in classifications if typ == "role"]
+            
+            if roles:
+                bbox = self.note_content_display.bbox(line_index)
+                if not bbox:  # Si la línea no es visible (bbox es None)
+                    continue
+                    
+                y_pos = bbox[1]
+                radius = 5
+                spacing = 8
+                total_height = len(roles) * spacing
+                
+                for i, role in enumerate(roles):
+                    color = self.role_colors.get(role, self.fg_color)
+                    tag_name = f"gutter_{line_num}_{i}"
+                    
+                    # Dibujar viñeta
+                    self.gutter_canvas.create_oval(
+                        15 - radius, y_pos - total_height/2 + i*spacing + radius,
+                        15 + radius, y_pos - total_height/2 + i*spacing + 3*radius,
+                        fill=color, outline=color, tags=tag_name
+                    )
+                    
+                    # Vincular evento de clic
+                    self.gutter_canvas.tag_bind(tag_name, "<Button-1>", 
+                                               lambda e, r=role, l=line_num: self.apply_role_to_line(r, l))
+
+    def apply_role_to_line(self, role, line_num):
+        """Aplica el color del rol a toda la línea"""
+        if not self.active_note_title:
+            return
+        
+        line_index = f"{line_num}.0"
+        line_end = f"{line_num}.end"
+        
+        # Primero quitar todos los tags de roles existentes
+        for r in self.role_colors:
+            self.note_content_display.tag_remove(r, line_index, line_end)
+        
+        # Aplicar el nuevo tag de rol
+        self.note_content_display.tag_add(role, line_index, line_end)
+        
+        # Guardar cambios
+        self.master.after(100, self.save_current_note)
 
     def load_notes_list(self):
         self.notes_tree.delete(*self.notes_tree.get_children())
@@ -895,14 +1024,39 @@ class NotesApp:
                 elif d_type == "eisenhower" and tag_to_apply == "general_text":
                     tag_to_apply = "EISENHOWER_" + d_name
             self.note_content_display.insert(tk.END, temp_line + "\n", tag_to_apply)
+            
+            # Actualizar gutter después de mostrar el contenido
+            if self.gutter_visible:
+                self.master.after(100, self.update_gutter)
+    
+            self.note_content_display.config(state=tk.DISABLED)
 
     def set_display_mode(self, mode):
-        """
-        Establece el modo de visualización para "Mostrar Todo".
-        'mode' puede ser "role" o "eisenhower".
-        Al seleccionar, limpia los filtros de rol y eisenhower.
-        """
+        """Establece el modo de visualización para "Mostrar Todo"."""
         self.display_mode = mode
+
+        # Mostrar/ocultar gutter según el modo
+        if mode == "role":
+            if not self.gutter_visible:
+                # Solo configurar si no está visible
+                if not hasattr(self, 'text_container') or not self.text_container.winfo_exists():
+                    # Crear contenedor si no existe
+                    self.text_container = ttk.Frame(self.note_content_display.master)
+                    self.text_container.pack(fill=tk.BOTH, expand=True)
+                self.setup_gutter()
+        else:
+            if self.gutter_visible:
+                # Ocultar el gutter si está visible
+                if hasattr(self, 'gutter_frame') and self.gutter_frame.winfo_exists():
+                    self.gutter_frame.pack_forget()
+                self.gutter_visible = False
+                
+                # Reorganizar el texto sin gutter
+                self.note_content_display.pack_forget()
+                if hasattr(self, 'text_container') and self.text_container.winfo_exists():
+                    self.note_content_display.pack(in_=self.text_container, side=tk.LEFT, fill=tk.BOTH, expand=True)
+                else:
+                    self.note_content_display.pack(fill=tk.BOTH, expand=True)
 
         # Limpiar filtros de roles
         for role in self.selected_roles.copy():
@@ -982,6 +1136,8 @@ class NotesApp:
         if success:
             messagebox.showinfo("Guardar Nota", message, parent=self.master)
             self.show_all_content()
+            if self.gutter_visible:
+                self.update_gutter()
         else:
             messagebox.showerror("Guardar Nota", message, parent=self.master)
 
@@ -1130,19 +1286,24 @@ class NotesApp:
             self.display_content(display_data)
         else:
             self.display_content([("No hay coincidencias con los filtros aplicados.", "general_text")])
-            
+    
     def display_content(self, content_lines_with_tags):
         """Muestra el contenido en el ScrolledText, aplicando colores según los tags"""
         self.note_content_display.config(state=tk.NORMAL)
         self.note_content_display.delete(1.0, tk.END)
+        
+        # Limpiar el mapeo de roles por línea
+        self.current_line_roles = {}
 
-        for line, tag in content_lines_with_tags:
+        for i, (line, tag) in enumerate(content_lines_with_tags, start=1):
             # Si estamos filtrando (el tag no es "general_text"), colorea toda la línea con ese tag
             if tag != "general_text":
                 self.note_content_display.insert(tk.END, line + "\n", tag)
                 continue
 
             temp_line = line
+            roles_in_line = []
+            
             # Detectar y colorear todos los roles al inicio
             while True:
                 found = False
@@ -1151,10 +1312,15 @@ class NotesApp:
                     if temp_line.startswith(prefix):
                         self.note_content_display.insert(tk.END, prefix, role)
                         temp_line = temp_line[len(prefix):]
+                        roles_in_line.append(role)
                         found = True
                         break
                 if not found:
                     break
+            
+            # Guardar roles para esta línea
+            if roles_in_line:
+                self.current_line_roles[i] = roles_in_line
             
             # Detectar y colorear la categoría Eisenhower si está presente
             eisenhower_tag = None
@@ -1177,6 +1343,10 @@ class NotesApp:
                     tag_to_apply = "EISENHOWER_" + d_name
             
             self.note_content_display.insert(tk.END, temp_line + "\n", tag_to_apply)
+        
+        # Actualizar gutter después de mostrar el contenido
+        if self.gutter_visible:
+            self.master.after(100, self.update_gutter)
         
         self.note_content_display.config(state=tk.DISABLED)
 
@@ -1420,9 +1590,15 @@ class NotesApp:
         y = (window.winfo_screenheight() // 2) - (height // 2)
         window.geometry(f'{width}x{height}+{x}+{y}')
 
-    def setup_normal_editor(self, dialog):
+    def setup_normal_editor(self):
         """Configura el editor normal"""
-        dialog.destroy()
+        # Asegurarse de que el editor de texto esté visible
+        self.note_content_display.pack(fill=tk.BOTH, expand=True)
+        
+        # Ocultar cualquier frame de tabla si existe
+        if hasattr(self, 'table_main_frame'):
+            self.table_main_frame.pack_forget()
+        
         self.show_all_content()
         
     def show_table_editor(self):
@@ -1731,6 +1907,12 @@ class MainApplication:
         master.withdraw() # Oculta la ventana principal, ya que usaremos Toplevels
 
         self.notes_manager = NotesManager() # Instancia única de NotesManager
+        
+        # Variables para el gutter
+        self.gutter_frame = None
+        self.gutter_canvas = None
+        self.gutter_visible = False
+        self.current_line_roles = {}  # Diccionario para mapear líneas a sus roles
 
         self.calendar_app_instance = None # Para mantener la referencia a la ventana del calendario
 
