@@ -694,6 +694,7 @@ class NotesApp:
         self.gutter_canvas = None
         self.gutter_visible = False
         self.current_line_roles = {}
+        self.gutter_role_order = {}  # Diccionario para guardar el orden de viñetas por línea
         
         self.right_frame = None
 
@@ -1010,7 +1011,7 @@ class NotesApp:
         return "break"
 
     def update_gutter(self, event=None):
-        """Actualiza las viñetas en el gutter basado en el contenido visible"""
+        """Actualiza las viñetas mostrándolas en orden inverso al texto"""
         if not self.gutter_visible or not self.gutter_canvas:
             return
         
@@ -1029,35 +1030,64 @@ class NotesApp:
             classifications = self.notes_manager.get_line_classification(line_text)
             roles = [name for typ, name in classifications if typ == "role"]
             
-            if roles:
+            if len(roles) > 1:
                 bbox = self.note_content_display.bbox(line_index)
                 if not bbox:
                     continue
                     
-                y_pos = bbox[1] + 5  # Ajuste vertical para centrar
-                radius = 5  # Tamaño del círculo
-                spacing = 10  # Espacio entre viñetas
-                start_x = 5  # Margen izquierdo
+                # Guardar o invertir el orden según lo que tengamos almacenado
+                if line_num not in self.gutter_role_order:
+                    self.gutter_role_order[line_num] = list(reversed(roles))  # Orden inverso inicial
+                current_order = self.gutter_role_order[line_num]
                 
-                for i, role in enumerate(roles):
+                y_pos = bbox[1] + 5
+                radius = 5
+                spacing = 10
+                start_x = 5
+                
+                for i, role in enumerate(current_order):
                     color = self.role_colors.get(role, self.fg_color)
                     tag_name = f"gutter_{line_num}_{i}"
                     
-                    # Coordenadas del círculo (horizontalmente alineados)
                     x0 = start_x + i * (radius * 2 + spacing)
                     y0 = y_pos
                     x1 = x0 + radius * 2
                     y1 = y0 + radius * 2
                     
-                    # Dibujar viñeta
                     self.gutter_canvas.create_oval(
                         x0, y0, x1, y1,
                         fill=color, outline=color, tags=tag_name
                     )
                     
-                    # Vincular evento de clic
+                    # Al hacer clic: intercambiar viñetas y cambiar color
                     self.gutter_canvas.tag_bind(tag_name, "<Button-1>", 
-                                              lambda e, r=role, l=line_num: self.apply_role_to_line(r, l))
+                        lambda e, r=role, l=line_num: self.handle_gutter_click(r, l))
+
+    def handle_gutter_click(self, clicked_role, line_num):
+        """Maneja el clic en las viñetas: intercambia orden y cambia color"""
+        # 1. Intercambiar el orden de las viñetas
+        if line_num in self.gutter_role_order:
+            current_order = self.gutter_role_order[line_num]
+            if len(current_order) > 1:
+                # Intercambiar las dos viñetas
+                self.gutter_role_order[line_num] = [current_order[1], current_order[0]]
+        
+        # 2. Cambiar el color de la línea al rol clickeado
+        line_index = f"{line_num}.0"
+        line_end = f"{line_num}.end"
+        
+        # Quitar todos los tags de color previos
+        for role in self.role_colors:
+            self.note_content_display.tag_remove(role, line_index, line_end)
+        
+        # Aplicar nuevo color
+        self.note_content_display.tag_add(clicked_role, line_index, line_end)
+        
+        # 3. Actualizar solo el gutter (no el texto)
+        self.update_gutter()
+        
+        # 4. Opcional: guardar el cambio de color
+        self.save_current_note()
 
     def apply_role_to_line(self, role, line_num):
         """Aplica el color del rol a toda la línea y guarda los cambios"""
