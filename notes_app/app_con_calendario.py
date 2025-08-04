@@ -312,7 +312,6 @@ class CalendarApp:
         self.update_calendar_view()
 
     def setup_ui(self):
-        # Destruir todos los widgets existentes antes de recrear la UI
         for widget in self.master.winfo_children():
             widget.destroy()
 
@@ -326,78 +325,130 @@ class CalendarApp:
 
         self.style.configure('.', background=self.bg_color, foreground=self.fg_color, font=self.font_normal)
         self.style.configure('TFrame', background=self.panel_bg)
-
         self.style.configure('TButton',
                              background=self.panel_bg,
                              foreground=self.fg_color,
-                             font=self.font_normal,
                              borderwidth=0,
                              focusthickness=0,
                              relief="flat",
-                             padding=[10, 5])
+                             padding=[5, 2])
         self.style.map('TButton',
                         background=[('active', self.accent_color)],
                         foreground=[('active', 'white')])
 
-        # --- Paneles principales ---
         main_pane = tk.PanedWindow(self.master, orient=tk.HORIZONTAL, bg=self.bg_color, sashrelief=tk.RAISED)
-        main_pane.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        main_pane.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Left Frame (Calendar Widget)
-        left_frame = ttk.Frame(main_pane, style='TFrame', padding=(15, 15, 10, 15))
-        main_pane.add(left_frame, width=350) # Ancho fijo para el calendario
+        left_frame = ttk.Frame(main_pane, style='TFrame', padding=(5, 5, 5, 5))
+        main_pane.add(left_frame, width=300)
 
-        tk.Label(left_frame, text="Seleccionar Fecha", font=("Helvetica Neue", 16, "bold"), bg=self.panel_bg, fg=self.fg_color).pack(pady=(0, 10))
+        tk.Label(left_frame, text="Notas", font=("Helvetica Neue", 11, "bold"), bg=self.panel_bg, fg=self.fg_color).pack(pady=(0, 5))
 
-        self.calendar = Calendar(left_frame,
-                                 selectmode='day',
-                                 year=self.selected_date.year,
-                                 month=self.selected_date.month,
-                                 day=self.selected_date.day,
-                                 date_pattern='dd/mm/yyyy', # Formato de fecha
-                                 bg=self.calendar_bg_color,
-                                 fg=self.calendar_fg_color,
-                                 headersbackground=self.calendar_header_color,
-                                 headersforeground=self.calendar_fg_color,
-                                 normalbackground=self.calendar_bg_color,
-                                 normalforeground=self.calendar_fg_color,
-                                 weekendbackground=self.calendar_bg_color,
-                                 weekendforeground=self.calendar_fg_color,
-                                 othermonthforeground=self.fg_color, # Colores más sutiles para otros meses
-                                 othermonthbackground=self.panel_bg,
-                                 othermonthweforeground=self.fg_color,
-                                 othermonthwebackground=self.panel_bg,
-                                 selectbackground=self.calendar_selected_day_color,
-                                 selectforeground="white",
-                                 tooltipfg="black", # Tooltip del día
-                                 bordercolor=self.border_color,
-                                 showweeknumbers=False,
-                                 font=self.font_normal)
-        self.calendar.pack(pady=10, padx=5, fill=tk.BOTH, expand=True)
-        self.calendar.bind("<<CalendarSelected>>", self.on_calendar_date_select)
+        self.notes_tree = ttk.Treeview(left_frame, show="tree", selectmode="browse", style="Custom.Treeview")
+        self.notes_tree.pack(pady=2, fill=tk.BOTH, expand=True)
+        self.notes_tree.bind("<<TreeviewSelect>>", self.on_note_tree_select)
 
-        # Right Frame (Events List)
-        right_frame = ttk.Frame(main_pane, style='TFrame', padding=(15, 15, 15, 15))
+        button_frame_left = ttk.Frame(left_frame, style='TFrame')
+        button_frame_left.pack(fill=tk.X, pady=3)
+        ttk.Button(button_frame_left, text="Recargar", command=self.load_notes_list).pack(side=tk.TOP, fill=tk.X, pady=1)
+        ttk.Button(button_frame_left, text="Nueva Nota", command=self.create_new_note).pack(side=tk.TOP, fill=tk.X, pady=1)
+        ttk.Button(button_frame_left, text="Calendario", command=self.open_calendar_window).pack(side=tk.TOP, fill=tk.X, pady=3)
+        ttk.Button(button_frame_left, text="Configurar Roles", command=self.open_roles_config_dialog).pack(side=tk.TOP, fill=tk.X, pady=1)
+
+        right_frame = ttk.Frame(main_pane, style='TFrame', padding=(5, 5, 5, 5))
         main_pane.add(right_frame)
 
-        self.date_label = ttk.Label(right_frame, text="", font=("Helvetica Neue", 14, "bold"))
-        self.date_label.pack(pady=(0, 10), anchor="w")
+        show_all_frame = ttk.Frame(right_frame, style='TFrame')
+        show_all_frame.pack(pady=(0, 5), fill=tk.X)
+        tk.Label(show_all_frame, text="Mostrar Todo:", font=self.font_small, bg=self.panel_bg, fg=self.fg_color).pack(side=tk.LEFT, padx=2)
+        ttk.Button(show_all_frame, text="Rol", command=lambda: self.set_display_mode("role")).pack(side=tk.LEFT, padx=2)
+        ttk.Button(show_all_frame, text="Eisenhower", command=lambda: self.set_display_mode("eisenhower")).pack(side=tk.LEFT, padx=2)
 
-        tk.Label(right_frame, text="Eventos del Día:", font=self.font_bold, bg=self.panel_bg, fg=self.fg_color).pack(pady=(0, 5), anchor="w")
+        tk.Label(right_frame, text="Contenido de la Nota", font=("Helvetica Neue", 11, "bold"), bg=self.panel_bg, fg=self.fg_color).pack(pady=(0, 5))
 
-        self.events_listbox = tk.Listbox(right_frame, font=self.font_normal,
-                                         bg=self.text_input_bg, fg=self.fg_color,
-                                         selectbackground=self.accent_color, selectforeground="white",
-                                         highlightbackground=self.border_color, highlightthickness=1,
-                                         bd=0, relief="flat", height=15)
-        self.events_listbox.pack(fill=tk.BOTH, expand=True)
+        self.text_container = ttk.Frame(right_frame)
+        self.text_container.pack(pady=2, fill=tk.BOTH, expand=True)
 
-        # Botones de acción para eventos
-        button_frame_bottom = ttk.Frame(right_frame, style='TFrame')
-        button_frame_bottom.pack(fill=tk.X, pady=10)
+        self.note_content_display = scrolledtext.ScrolledText(self.text_container, wrap=tk.WORD, font=self.font_code,
+                                                               bg=self.text_input_bg, fg=self.fg_color,
+                                                               insertbackground=self.fg_color,
+                                                               highlightbackground=self.border_color, highlightthickness=1,
+                                                               bd=0, relief="flat", padx=5, pady=5)
+        self.note_content_display.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        ttk.Button(button_frame_bottom, text="Editar Evento", command=self.edit_selected_event).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame_bottom, text="Eliminar Evento", command=self.delete_selected_event).pack(side=tk.LEFT, padx=5)
+        for role, color in self.role_colors.items():
+            self.note_content_display.tag_config(role, foreground=color)
+        for tag, color in self.eisenhower_tag_colors.items():
+            self.note_content_display.tag_config(tag, foreground=color)
+        self.note_content_display.tag_config("general_text", foreground=self.fg_color)
+
+        ttk.Button(right_frame, text="Guardar", command=self.save_current_note).pack(pady=2, fill=tk.X)
+        ttk.Button(right_frame, text="Programar en Calendario", command=self.schedule_task_in_calendar).pack(pady=2, fill=tk.X)
+
+        filter_role_frame = ttk.Frame(right_frame, style='TFrame')
+        filter_role_frame.pack(pady=(5, 2), fill=tk.X)
+        tk.Label(filter_role_frame, text="Filtrar por Rol:", font=self.font_small, bg=self.panel_bg, fg=self.fg_color).pack(side=tk.LEFT, padx=2)
+
+        self.role_buttons = {}
+        for role in self.notes_manager.valid_roles:
+            btn_color = self.role_colors.get(role, self.fg_color)
+            style_name = f'Role.{role}.TButton'
+            self.style.configure(style_name, background=self.panel_bg, foreground=btn_color)
+            self.style.map(style_name,
+                            background=[('active', self.accent_color)],
+                            foreground=[('active', 'white')])
+            btn = ttk.Button(filter_role_frame, text=role, command=lambda r=role: self.toggle_role_filter(r),
+                             style=style_name)
+            btn.pack(side=tk.LEFT, padx=1)
+            self.role_buttons[role] = btn
+
+        filter_eisenhower_frame = ttk.Frame(right_frame, style='TFrame')
+        filter_eisenhower_frame.pack(pady=2, fill=tk.X)
+        tk.Label(filter_eisenhower_frame, text="Filtrar Eisenhower:", font=self.font_small, bg=self.panel_bg, fg=self.fg_color).pack(side=tk.LEFT, padx=2)
+
+        for abbr, category_key in self.notes_manager.eisenhower_abbreviations.items():
+            category_name = self.notes_manager.eisenhower_categories[category_key]
+            btn_text = f"{category_name.split(',')[0]} (E:{abbr})"
+            tag_name_for_color = "EISENHOWER_" + category_key
+            btn_color = self.eisenhower_tag_colors.get(tag_name_for_color, self.fg_color)
+            style_name = f'Eisenhower.{category_key}.TButton'
+            self.style.configure(style_name, background=self.panel_bg, foreground=btn_color)
+            self.style.map(style_name,
+                            background=[('active', self.accent_color)],
+                            foreground=[('active', 'white')])
+            btn = ttk.Button(
+                filter_eisenhower_frame,
+                text=btn_text,
+                command=lambda c=category_key: self.toggle_eisenhower_filter(c),
+                style=style_name
+            )
+            btn.pack(side=tk.LEFT, padx=1)
+            if not hasattr(self, 'eisenhower_buttons'):
+                self.eisenhower_buttons = {}
+            self.eisenhower_buttons[category_key] = btn
+
+        ttk.Button(filter_eisenhower_frame, text="Ejemplo", command=self.show_eisenhower_example).pack(side=tk.LEFT, padx=2)
+        
+        task_type_frame = ttk.Frame(right_frame, style='TFrame')
+        task_type_frame.pack(pady=(0, 5), fill=tk.X)
+        tk.Label(task_type_frame, text="Filtrar por tipo:", font=self.font_small, bg=self.panel_bg, fg=self.fg_color).pack(side=tk.LEFT, padx=2)
+
+        for type_key, type_name in self.notes_manager.task_types.items():
+            btn = ttk.Button(
+                task_type_frame, 
+                text=type_name,
+                command=lambda tk=type_key: self.filter_notes_by_task_type(tk)
+            )
+            btn.pack(side=tk.LEFT, padx=2)
+            style_name = f'TaskType.{type_key}.TButton'
+            self.style.configure(style_name, 
+                                foreground=self.task_type_colors[f"TASK_TYPE_{type_key}"])
+            btn.configure(style=style_name)
+
+        theme_frame = ttk.Frame(right_frame, style='TFrame')
+        theme_frame.pack(pady=(0, 5), fill=tk.X)
+        ttk.Button(theme_frame, text="Tema Claro", command=lambda: self.set_theme("light")).pack(side=tk.LEFT, padx=2)
+        ttk.Button(theme_frame, text="Tema Oscuro", command=lambda: self.set_theme("dark")).pack(side=tk.LEFT, padx=2)
 
     def on_calendar_date_select(self, event):
         # Callback cuando se selecciona una fecha en el widget Calendar
@@ -631,7 +682,6 @@ class NotesApp:
 
         self.setup_ui()
         self.load_notes_list()
-
     def setup_ui(self):
         # Destruir todos los widgets existentes antes de recrear la UI
         for widget in self.master.winfo_children():
@@ -639,7 +689,7 @@ class NotesApp:
 
         self.master.config(bg=self.bg_color)
 
-        # Solo actualiza colores, NO fuentes ni crees self.style de nuevo
+        # Configuración de estilos (se mantiene igual)
         self.style.configure('.', background=self.bg_color, foreground=self.fg_color)
         self.style.configure('TFrame', background=self.panel_bg)
         self.style.configure('TButton',
@@ -655,35 +705,18 @@ class NotesApp:
 
         # --- Paneles principales ---
         main_pane = tk.PanedWindow(self.master, orient=tk.HORIZONTAL, bg=self.bg_color, sashrelief=tk.RAISED)
-        main_pane.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)  # Padding reducido
+        main_pane.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Left Frame (Sidebar)
-        left_frame = ttk.Frame(main_pane, style='TFrame', padding=(5, 5, 5, 5))  # Padding reducido
-        main_pane.add(left_frame, width=300)  # Ancho fijo para el panel izquierdo
+        # Left Frame (Sidebar) - Se mantiene igual
+        left_frame = ttk.Frame(main_pane, style='TFrame', padding=(5, 5, 5, 5))
+        main_pane.add(left_frame, width=300)
 
         tk.Label(left_frame, text="Notas", font=("Helvetica Neue", 11, "bold"), bg=self.panel_bg, fg=self.fg_color).pack(pady=(0, 5))
 
-        # Estilo para Treeview (ventana de selección de notas)
-        self.style.configure("Custom.Treeview",
-                             background=self.panel_bg,
-                             foreground=self.fg_color,
-                             fieldbackground=self.panel_bg,
-                             bordercolor=self.border_color,
-                             font=self.font_normal)
-        self.style.map("Custom.Treeview",
-                       background=[('selected', self.accent_color)],
-                       foreground=[('selected', 'white')])
-        self.style.configure("Custom.Treeview.Heading",
-                             background=self.panel_bg,
-                             foreground=self.fg_color,
-                             font=self.font_bold)
-
-        # Reemplaza el Listbox por un Treeview para jerarquía
         self.notes_tree = ttk.Treeview(left_frame, show="tree", selectmode="browse", style="Custom.Treeview")
         self.notes_tree.pack(pady=2, fill=tk.BOTH, expand=True)
         self.notes_tree.bind("<<TreeviewSelect>>", self.on_note_tree_select)
 
-        # Botones de gestión de notas en el panel izquierdo
         button_frame_left = ttk.Frame(left_frame, style='TFrame')
         button_frame_left.pack(fill=tk.X, pady=3)
         ttk.Button(button_frame_left, text="Recargar", command=self.load_notes_list).pack(side=tk.TOP, fill=tk.X, pady=1)
@@ -695,7 +728,7 @@ class NotesApp:
         right_frame = ttk.Frame(main_pane, style='TFrame', padding=(5, 5, 5, 5))
         main_pane.add(right_frame)
 
-        # Botones de color arriba
+        # Controles superiores (se mantienen igual)
         show_all_frame = ttk.Frame(right_frame, style='TFrame')
         show_all_frame.pack(pady=(0, 5), fill=tk.X)
         tk.Label(show_all_frame, text="Mostrar Todo:", font=self.font_small, bg=self.panel_bg, fg=self.fg_color).pack(side=tk.LEFT, padx=2)
@@ -704,24 +737,29 @@ class NotesApp:
 
         tk.Label(right_frame, text="Contenido de la Nota", font=("Helvetica Neue", 11, "bold"), bg=self.panel_bg, fg=self.fg_color).pack(pady=(0, 5))
 
-        self.note_content_display = scrolledtext.ScrolledText(right_frame, wrap=tk.WORD, font=self.font_code,
-                                                               bg=self.text_input_bg, fg=self.fg_color,
-                                                               insertbackground=self.fg_color,
-                                                               highlightbackground=self.border_color, highlightthickness=1,
-                                                               bd=0, relief="flat", padx=5, pady=5, height=10)
-        # Crear un frame contenedor para el gutter y el texto
+        # Área de contenido principal - MODIFICACIÓN IMPORTANTE
         self.text_container = ttk.Frame(right_frame)
         self.text_container.pack(pady=2, fill=tk.BOTH, expand=True)
 
-        # Luego llama a setup_gutter() sin parámetros
+        # Crear el ScrolledText PRIMERO
+        self.note_content_display = scrolledtext.ScrolledText(self.text_container, wrap=tk.WORD, font=self.font_code,
+                                                           bg=self.text_input_bg, fg=self.fg_color,
+                                                           insertbackground=self.fg_color,
+                                                           highlightbackground=self.border_color, highlightthickness=1,
+                                                           bd=0, relief="flat", padx=5, pady=5)
+        self.note_content_display.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Luego configurar el gutter
         self.setup_gutter()
 
+        # Configurar tags de color
         for role, color in self.role_colors.items():
             self.note_content_display.tag_config(role, foreground=color)
         for tag, color in self.eisenhower_tag_colors.items():
             self.note_content_display.tag_config(tag, foreground=color)
         self.note_content_display.tag_config("general_text", foreground=self.fg_color)
 
+        # Resto de la interfaz (se mantiene igual)
         ttk.Button(right_frame, text="Guardar", command=self.save_current_note).pack(pady=2, fill=tk.X)
         ttk.Button(right_frame, text="Programar en Calendario", command=self.schedule_task_in_calendar).pack(pady=2, fill=tk.X)
 
@@ -817,7 +855,7 @@ class NotesApp:
         if hasattr(self, 'gutter_frame') and self.gutter_frame:
             self.gutter_frame.destroy()
         
-        # Crear el frame del gutter
+        # Crear el frame del gutter (ancho fijo de 30px)
         self.gutter_frame = tk.Frame(self.text_container, width=30, bg=self.panel_bg)
         self.gutter_frame.pack(side=tk.LEFT, fill=tk.Y)
         
@@ -825,10 +863,6 @@ class NotesApp:
         self.gutter_canvas = tk.Canvas(self.gutter_frame, bg=self.panel_bg, width=30, 
                                      highlightthickness=0, bd=0)
         self.gutter_canvas.pack(fill=tk.BOTH, expand=True)
-        
-        # Reorganizar el área de texto
-        self.note_content_display.pack_forget()
-        self.note_content_display.pack(in_=self.text_container, side=tk.LEFT, fill=tk.BOTH, expand=True)
         
         # Configurar eventos de scroll sincronizados
         self.note_content_display.bind("<MouseWheel>", self.sync_scroll)
@@ -955,29 +989,28 @@ class NotesApp:
             messagebox.showinfo("Crear Nota", message, parent=self.master)
             if success:
                 self.load_notes_list()
-
+                
     def on_note_tree_select(self, event):
         selected = self.notes_tree.selection()
         if selected:
             item = self.notes_tree.item(selected[0])
-            # Si el ítem no tiene 'values', es una carpeta/padre
             if not item['values']:
-                # Deselecciona el ítem para evitar confusión visual
                 self.notes_tree.selection_remove(selected[0])
                 return
+            
             note_path = item['values'][0]
             self.active_note_title = note_path
-            self.show_all_content()
-
+            
+            if self.notes_manager.is_note_empty(note_path):
+                self.show_note_type_selection()
+            else:
+                self.show_all_content()
+                
     def display_content(self, content_lines_with_tags):
-        """
-        Muestra el contenido en el ScrolledText, aplicando colores según los tags.
-        Si hay varios roles, colorea cada prefijo [Rol] con su color.
-        Si se está filtrando, colorea toda la línea con el tag recibido.
-        """
+        """Muestra el contenido en el ScrolledText, aplicando colores según los tags"""
         self.note_content_display.config(state=tk.NORMAL)
         self.note_content_display.delete(1.0, tk.END)
-
+        
         for line, tag in content_lines_with_tags:
             # Si estamos filtrando (el tag no es "general_text"), colorea toda la línea con ese tag
             if tag != "general_text":
@@ -997,6 +1030,7 @@ class NotesApp:
                         break
                 if not found:
                     break
+            
             # Detectar y colorear la categoría Eisenhower si está presente
             eisenhower_tag = None
             for abbr, key in self.notes_manager.eisenhower_abbreviations.items():
@@ -1006,14 +1040,7 @@ class NotesApp:
                     self.note_content_display.insert(tk.END, prefix, eisenhower_tag)
                     temp_line = temp_line[len(prefix):]
                     break
-            # Detectar y colorear el tipo de tarea si está presente
-            task_type_tag = None
-            for prefix, key in self.notes_manager.task_type_prefixes_map.items():
-                if temp_line.startswith(prefix):
-                    task_type_tag = "TASK_TYPE_" + key
-                    self.note_content_display.insert(tk.END, prefix, task_type_tag)
-                    temp_line = temp_line[len(prefix):]
-                    break        
+            
             # El resto de la línea: color del primer rol, o Eisenhower, o general
             tag_to_apply = "general_text"
             detected = self.notes_manager.get_line_classification(line)
@@ -1023,13 +1050,12 @@ class NotesApp:
                     break
                 elif d_type == "eisenhower" and tag_to_apply == "general_text":
                     tag_to_apply = "EISENHOWER_" + d_name
-            self.note_content_display.insert(tk.END, temp_line + "\n", tag_to_apply)
             
-            # Actualizar gutter después de mostrar el contenido
-            if self.gutter_visible:
-                self.master.after(100, self.update_gutter)
-    
-            self.note_content_display.config(state=tk.DISABLED)
+            self.note_content_display.insert(tk.END, temp_line + "\n", tag_to_apply)
+        
+        self.note_content_display.config(state=tk.DISABLED)
+        if self.gutter_visible:
+            self.update_gutter()
 
     def set_display_mode(self, mode):
         """Establece el modo de visualización para "Mostrar Todo"."""
@@ -1082,24 +1108,18 @@ class NotesApp:
             self.display_content([(msg, "general_text")])
             return
         
-        # Verificar si es una tabla guardada
         if "<!-- TABLE-START -->" in content and "<!-- TABLE-END -->" in content:
-            self.table_content_to_load = content  # <-- Guardar contenido para cargar
+            self.table_content_to_load = content
             self.setup_table_editor()
         else:
-            # Mostrar contenido normal
             self.display_normal_content(content)
             
     def display_normal_content(self, content):
-        """Muestra el contenido normal con resaltado de colores"""
-        # Asegurarse de que el editor de texto esté visible
         self.note_content_display.pack(fill=tk.BOTH, expand=True)
         
-        # Ocultar cualquier frame de tabla si existe
         if hasattr(self, 'table_main_frame'):
             self.table_main_frame.pack_forget()
         
-        # Mostrar contenido con resaltado
         lines = content.split('\n')
         display_data = []
         for line in lines:
@@ -1287,68 +1307,6 @@ class NotesApp:
         else:
             self.display_content([("No hay coincidencias con los filtros aplicados.", "general_text")])
     
-    def display_content(self, content_lines_with_tags):
-        """Muestra el contenido en el ScrolledText, aplicando colores según los tags"""
-        self.note_content_display.config(state=tk.NORMAL)
-        self.note_content_display.delete(1.0, tk.END)
-        
-        # Limpiar el mapeo de roles por línea
-        self.current_line_roles = {}
-
-        for i, (line, tag) in enumerate(content_lines_with_tags, start=1):
-            # Si estamos filtrando (el tag no es "general_text"), colorea toda la línea con ese tag
-            if tag != "general_text":
-                self.note_content_display.insert(tk.END, line + "\n", tag)
-                continue
-
-            temp_line = line
-            roles_in_line = []
-            
-            # Detectar y colorear todos los roles al inicio
-            while True:
-                found = False
-                for role in self.notes_manager.valid_roles:
-                    prefix = f"[{role}]"
-                    if temp_line.startswith(prefix):
-                        self.note_content_display.insert(tk.END, prefix, role)
-                        temp_line = temp_line[len(prefix):]
-                        roles_in_line.append(role)
-                        found = True
-                        break
-                if not found:
-                    break
-            
-            # Guardar roles para esta línea
-            if roles_in_line:
-                self.current_line_roles[i] = roles_in_line
-            
-            # Detectar y colorear la categoría Eisenhower si está presente
-            eisenhower_tag = None
-            for abbr, key in self.notes_manager.eisenhower_abbreviations.items():
-                prefix = f"[E:{abbr}]"
-                if temp_line.startswith(prefix):
-                    eisenhower_tag = "EISENHOWER_" + key
-                    self.note_content_display.insert(tk.END, prefix, eisenhower_tag)
-                    temp_line = temp_line[len(prefix):]
-                    break
-            
-            # El resto de la línea: color del primer rol, o Eisenhower, o general
-            tag_to_apply = "general_text"
-            detected = self.notes_manager.get_line_classification(line)
-            for d_type, d_name in detected:
-                if d_type == "role":
-                    tag_to_apply = d_name
-                    break
-                elif d_type == "eisenhower" and tag_to_apply == "general_text":
-                    tag_to_apply = "EISENHOWER_" + d_name
-            
-            self.note_content_display.insert(tk.END, temp_line + "\n", tag_to_apply)
-        
-        # Actualizar gutter después de mostrar el contenido
-        if self.gutter_visible:
-            self.master.after(100, self.update_gutter)
-        
-        self.note_content_display.config(state=tk.DISABLED)
 
     def open_roles_config_dialog(self):
         dialog = Toplevel(self.master)
@@ -1531,22 +1489,6 @@ class NotesApp:
             self.role_buttons[role] = btn
 
         self.show_all_content()
-    
-    def on_note_tree_select(self, event):
-        selected = self.notes_tree.selection()
-        if selected:
-            item = self.notes_tree.item(selected[0])
-            if not item['values']:
-                self.notes_tree.selection_remove(selected[0])
-                return
-            
-            note_path = item['values'][0]
-            self.active_note_title = note_path
-            
-            if self.notes_manager.is_note_empty(note_path):
-                self.show_note_type_selection()
-            else:
-                self.show_all_content()
 
     def show_note_type_selection(self):
         """Muestra diálogo para seleccionar el tipo de editor para notas vacías"""
