@@ -1064,30 +1064,72 @@ class NotesApp:
                         lambda e, r=role, l=line_num: self.handle_gutter_click(r, l))
 
     def handle_gutter_click(self, clicked_role, line_num):
-        """Maneja el clic en las viñetas: intercambia orden y cambia color"""
-        # 1. Intercambiar el orden de las viñetas
-        if line_num in self.gutter_role_order:
-            current_order = self.gutter_role_order[line_num]
-            if len(current_order) > 1:
-                # Intercambiar las dos viñetas
-                self.gutter_role_order[line_num] = [current_order[1], current_order[0]]
-        
-        # 2. Cambiar el color de la línea al rol clickeado
+        """Maneja el clic en las viñetas: intercambia orden y cambia color permanentemente"""
+        # 1. Obtener el texto actual de la línea
         line_index = f"{line_num}.0"
         line_end = f"{line_num}.end"
+        line_text = self.note_content_display.get(line_index, line_end)
         
-        # Quitar todos los tags de color previos
-        for role in self.role_colors:
-            self.note_content_display.tag_remove(role, line_index, line_end)
+        # 2. Obtener clasificaciones actuales
+        classifications = self.notes_manager.get_line_classification(line_text)
+        current_roles = [name for typ, name in classifications if typ == "role"]
         
-        # Aplicar nuevo color
-        self.note_content_display.tag_add(clicked_role, line_index, line_end)
+        if not current_roles:
+            return  # No hay roles para intercambiar
         
-        # 3. Actualizar solo el gutter (no el texto)
+        # 3. Encontrar el índice del rol clickeado
+        try:
+            idx = current_roles.index(clicked_role)
+        except ValueError:
+            return  # Rol no encontrado
+        
+        # 4. Intercambiar con el primer rol
+        current_roles[0], current_roles[idx] = current_roles[idx], current_roles[0]
+        
+        # 5. Guardar el nuevo orden
+        self.gutter_role_order[line_num] = current_roles
+        
+        # 6. Reconstruir la línea con los roles en el nuevo orden
+        new_line = self.rebuild_line_with_roles(line_text, classifications, current_roles)
+        
+        # 7. Actualizar el contenido de la línea
+        self.note_content_display.delete(line_index, line_end)
+        self.note_content_display.insert(line_index, new_line)
+        
+        # 8. Aplicar el color del primer rol
+        first_role = current_roles[0]
+        self.note_content_display.tag_add(first_role, line_index, line_end)
+        
+        # 9. Actualizar el gutter
         self.update_gutter()
         
-        # 4. Opcional: guardar el cambio de color
+        # 10. Guardar los cambios inmediatamente
         self.save_current_note()
+
+    def rebuild_line_with_roles(self, line_text, classifications, new_role_order):
+        """Reconstruye la línea con los roles en el nuevo orden"""
+        # 1. Quitar todos los roles existentes
+        for cls_type, cls_name in classifications:
+            if cls_type == "role":
+                line_text = line_text.replace(f"[{cls_name}]", "").strip()
+        
+        # 2. Quitar espacios iniciales
+        line_text = line_text.strip()
+        
+        # 3. Añadir los roles en el nuevo orden
+        roles_str = " ".join([f"[{role}]" for role in new_role_order])
+        
+        # 4. Mantener otros tags (Eisenhower, etc.)
+        other_tags = ""
+        for cls_type, cls_name in classifications:
+            if cls_type == "eisenhower":
+                prefix = f"[E:{list(self.notes_manager.eisenhower_abbreviations.keys())[list(self.notes_manager.eisenhower_abbreviations.values()).index(cls_name)]}]"
+                other_tags += prefix + " "
+            elif cls_type == "task_type":
+                prefix = f"[T:{list(self.notes_manager.task_types.keys())[list(self.notes_manager.task_types.values()).index(cls_name)]}]"
+                other_tags += prefix + " "
+        
+        return f"{roles_str} {other_tags}{line_text}".strip()
 
     def apply_role_to_line(self, role, line_num):
         """Aplica el color del rol a toda la línea y guarda los cambios"""
@@ -1125,7 +1167,7 @@ class NotesApp:
         # 1. Quitar todos los roles existentes
         for cls_type, cls_name in classifications:
             if cls_type == "role":
-                line_text = line_text.replace(f"[{cls_name}]", "")
+                line_text = line_text.replace(f"[{cls_name}]", "").strip()
         
         # 2. Quitar espacios iniciales
         line_text = line_text.strip()
@@ -1183,49 +1225,103 @@ class NotesApp:
         self.note_content_display.config(state=tk.NORMAL)
         self.note_content_display.delete(1.0, tk.END)
         
-        for line, tag in content_lines_with_tags:
-            # Si estamos filtrando (el tag no es "general_text"), colorea toda la línea con ese tag
-            if tag != "general_text":
-                self.note_content_display.insert(tk.END, line + "\n", tag)
+        for line, _ in content_lines_with_tags:
+            line_text = line.strip()
+            if not line_text:
+                self.note_content_display.insert(tk.END, "\n")
                 continue
-
-            temp_line = line
-            # Detectar y colorear todos los roles al inicio
-            while True:
-                found = False
-                for role in self.notes_manager.valid_roles:
-                    prefix = f"[{role}]"
-                    if temp_line.startswith(prefix):
-                        self.note_content_display.insert(tk.END, prefix, role)
-                        temp_line = temp_line[len(prefix):]
-                        found = True
-                        break
-                if not found:
-                    break
+                
+            # Obtener todas las clasificaciones de la línea
+            classifications = self.notes_manager.get_line_classification(line_text)
             
-            # Detectar y colorear la categoría Eisenhower si está presente
-            eisenhower_tag = None
-            for abbr, key in self.notes_manager.eisenhower_abbreviations.items():
-                prefix = f"[E:{abbr}]"
-                if temp_line.startswith(prefix):
-                    eisenhower_tag = "EISENHOWER_" + key
-                    self.note_content_display.insert(tk.END, prefix, eisenhower_tag)
-                    temp_line = temp_line[len(prefix):]
-                    break
+            # Separar los diferentes tipos de tags
+            roles = [name for typ, name in classifications if typ == "role"]
+            eisenhowers = [name for typ, name in classifications if typ == "eisenhower"]
+            task_types = [name for typ, name in classifications if typ == "task_type"]
             
-            # El resto de la línea: color del primer rol, o Eisenhower, o general
-            tag_to_apply = "general_text"
-            detected = self.notes_manager.get_line_classification(line)
-            for d_type, d_name in detected:
-                if d_type == "role":
-                    tag_to_apply = d_name
-                    break
-                elif d_type == "eisenhower" and tag_to_apply == "general_text":
-                    tag_to_apply = "EISENHOWER_" + d_name
+            # Construir la línea con todos los tags
+            full_line = ""
             
-            self.note_content_display.insert(tk.END, temp_line + "\n", tag_to_apply)
+            # 1. Añadir roles
+            for role in roles:
+                full_line += f"[{role}] "
+            
+            # 2. Añadir Eisenhower
+            for eisenhower in eisenhowers:
+                # Convertir de clave a abreviatura (ej: "HACER_AHORA" -> "HA")
+                abbr = [k for k, v in self.notes_manager.eisenhower_abbreviations.items() 
+                       if v == eisenhower][0]
+                full_line += f"[E:{abbr}] "
+            
+            # 3. Añadir tipos de tarea
+            for task_type in task_types:
+                # Convertir de nombre a clave (ej: "Tarea" -> "TAREA")
+                type_key = [k for k, v in self.notes_manager.task_types.items() 
+                           if v == task_type][0]
+                full_line += f"[T:{type_key}] "
+            
+            # 4. Añadir el texto restante (sin tags)
+            remaining_text = line_text
+            for cls_type, cls_name in classifications:
+                if cls_type == "role":
+                    remaining_text = remaining_text.replace(f"[{cls_name}]", "").strip()
+                elif cls_type == "eisenhower":
+                    abbr = [k for k, v in self.notes_manager.eisenhower_abbreviations.items() 
+                           if v == cls_name][0]
+                    remaining_text = remaining_text.replace(f"[E:{abbr}]", "").strip()
+                elif cls_type == "task_type":
+                    type_key = [k for k, v in self.notes_manager.task_types.items() 
+                               if v == cls_name][0]
+                    remaining_text = remaining_text.replace(f"[T:{type_key}]", "").strip()
+            
+            full_line += remaining_text
+            
+            # Determinar el tag principal para colorear la línea completa
+            main_tag = "general_text"
+            if roles:
+                main_tag = roles[0]  # Primer rol define el color principal
+            elif eisenhowers:
+                main_tag = f"EISENHOWER_{eisenhowers[0]}"
+            elif task_types:
+                main_tag = f"TASK_TYPE_{task_types[0]}"
+            
+            # Insertar la línea con el tag principal
+            self.note_content_display.insert(tk.END, full_line + "\n", main_tag)
+            
+            # Aplicar tags individuales para cada elemento
+            insert_pos = self.note_content_display.index(tk.END + "-2c")  # Posición antes del \n
+            
+            # Aplicar colores a los tags individuales
+            for role in roles:
+                start = full_line.find(f"[{role}]")
+                if start >= 0:
+                    end = start + len(f"[{role}]")
+                    self.note_content_display.tag_add(role, f"{insert_pos} + {start}c", f"{insert_pos} + {end}c")
+            
+            for eisenhower in eisenhowers:
+                abbr = [k for k, v in self.notes_manager.eisenhower_abbreviations.items() 
+                       if v == eisenhower][0]
+                tag = f"[E:{abbr}]"
+                start = full_line.find(tag)
+                if start >= 0:
+                    end = start + len(tag)
+                    self.note_content_display.tag_add(f"EISENHOWER_{eisenhower}", 
+                                                    f"{insert_pos} + {start}c", 
+                                                    f"{insert_pos} + {end}c")
+            
+            for task_type in task_types:
+                type_key = [k for k, v in self.notes_manager.task_types.items() 
+                           if v == task_type][0]
+                tag = f"[T:{type_key}]"
+                start = full_line.find(tag)
+                if start >= 0:
+                    end = start + len(tag)
+                    self.note_content_display.tag_add(f"TASK_TYPE_{type_key}", 
+                                                    f"{insert_pos} + {start}c", 
+                                                    f"{insert_pos} + {end}c")
         
-        self.note_content_display.config(state=tk.DISABLED)
+        self.note_content_display.config(state=tk.NORMAL)
+        
         if self.gutter_visible:
             self.update_gutter()
 
@@ -1322,16 +1418,48 @@ class NotesApp:
             messagebox.showwarning("Guardar Nota", "No hay una nota seleccionada para guardar.", parent=self.master)
             return
 
-        current_content = self.note_content_display.get(1.0, tk.END).strip()
-
-        success, message = self.notes_manager.save_note_content(self.active_note_title, current_content)
+        # Obtener el contenido actual con los tags aplicados
+        content = self.note_content_display.get(1.0, tk.END)
+        
+        # Guardar el contenido
+        success, message = self.notes_manager.save_note_content(self.active_note_title, content.strip())
         if success:
             messagebox.showinfo("Guardar Nota", message, parent=self.master)
+            # Recargar el contenido para asegurar consistencia
             self.show_all_content()
             if self.gutter_visible:
                 self.update_gutter()
         else:
             messagebox.showerror("Guardar Nota", message, parent=self.master)
+    
+    def apply_current_tags(self):
+        """Aplica los tags actuales a todo el contenido antes de guardar"""
+        content = self.note_content_display.get(1.0, tk.END)
+        lines = content.split('\n')
+        
+        self.note_content_display.config(state=tk.NORMAL)
+        self.note_content_display.delete(1.0, tk.END)
+        
+        for line_num, line in enumerate(lines, start=1):
+            if not line.strip():
+                self.note_content_display.insert(tk.END, "\n")
+                continue
+                
+            line_index = f"{line_num}.0"
+            classifications = self.notes_manager.get_line_classification(line)
+            
+            # Aplicar el color del primer rol encontrado
+            applied_tag = "general_text"
+            for cls_type, cls_name in classifications:
+                if cls_type == "role":
+                    applied_tag = cls_name
+                    break
+                elif cls_type == "eisenhower":
+                    applied_tag = f"EISENHOWER_{cls_name}"
+            
+            self.note_content_display.insert(tk.END, line + "\n", applied_tag)
+        
+        self.note_content_display.config(state=tk.NORMAL)
 
     def filter_note(self, classification_type, classification_name):
         if not self.active_note_title:
