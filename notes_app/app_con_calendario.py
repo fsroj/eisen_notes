@@ -615,13 +615,12 @@ class NotesApp:
         master.geometry("600x600")
 
         self.notes_manager = notes_manager
-        # Variables para la tabla
-        self.current_columns = 2  # Valor inicial para las columnas de la tabla
+        self.current_columns = 2
         self.active_note_title = None
         self.display_mode = "role"
         self.calendar_app_instance = calendar_app_instance
 
-        # Colores
+        # Inicializar colores del tema oscuro por defecto
         self.bg_color = "#2E2E2E"
         self.fg_color = "#F5F5F5"
         self.panel_bg = "#3A3A3A"
@@ -635,61 +634,112 @@ class NotesApp:
         self.font_small = ("Helvetica Neue", 10)
         self.font_code = ("Menlo", 11)
 
-        # Crea el objeto Style solo una vez
+        # Colores para roles
+        self.role_colors = {
+            "TLP": "#FF5252",
+            "Trabajo": "#FF7F50",
+            "Diseñador": "#FF8C69",
+            "Asistente": "#FFD700",
+            "Work-out": "#7FFFD4",
+            "Tesista": "#00CED1",
+            "Programador": "#20B2AA",
+            "Social": "#1E90FF",
+            "General": "#00BFFF",
+            "Ropa/Accesorios": "#BA55D3",
+            "Estudiante": "#DA70D6"
+        }
+
+        self.eisenhower_tag_colors = {
+            "EISENHOWER_HACER_AHORA": "#FF6B6B",
+            "EISENHOWER_PLANIFICAR": "#4ECDC4",
+            "EISENHOWER_DELEGAR": "#FFA07A",
+            "EISENHOWER_ELIMINAR": "#C0C0C0"
+        }
+
+        self.task_type_colors = {
+            "TASK_TYPE_IDEA": "#FF8C00",
+            "TASK_TYPE_TAREA": "#FF1493",
+            "TASK_TYPE_PROYECTO": "#00BFFF"
+        }
+
+        # Variables para filtros
+        self.selected_roles = set()
+        self.selected_eisenhowers = set()
+        self.selected_task_types = set()
+        self.theme_mode = "dark"
+
+        # Configuración de estilos
         self.style = ttk.Style()
         try:
             self.style.theme_use('clam')
         except tk.TclError:
             self.style.theme_use('alt')
 
-        self.role_colors = {
-        "TLP": "#FF5252",        # Rojo neón suavizado
-        "Trabajo": "#FF7F50",    # Coral eléctrico
-        "Diseñador": "#FF8C69",  # Salmón neón
-        "Asistente": "#FFD700",  # Amarillo oro
-        "Work-out": "#7FFFD4",   # Agua marina
-        "Tesista": "#00CED1",    # Verde-azul turquesa
-        "Programador": "#20B2AA", # Verde marino
-        "Social": "#1E90FF",     # Azul dodger
-        "General": "#00BFFF",    # Azul cielo profundo
-        "Ropa/Accesorios": "#BA55D3", # Orquídea media
-        "Estudiante": "#DA70D6"  # Orquídea pastel
-        }
+        # Configuración del Treeview
+        self.style.configure("Treeview", 
+                           background=self.text_input_bg,
+                           foreground=self.fg_color,
+                           fieldbackground=self.text_input_bg,
+                           borderwidth=0)
+        self.style.configure("Treeview.Heading",
+                           background=self.panel_bg,
+                           foreground=self.fg_color,
+                           relief="flat")
+        self.style.map('Treeview', 
+                     background=[('selected', self.accent_color)],
+                     foreground=[('selected', 'white')])
 
-        self.eisenhower_tag_colors = {
-        "EISENHOWER_HACER_AHORA": "#FF6B6B",    # Rojo pastel intenso
-        "EISENHOWER_PLANIFICAR":  "#4ECDC4",     # Verde azulado vibrante pastel
-        "EISENHOWER_DELEGAR": "#FFA07A",        # Salmón pastel suave
-        "EISENHOWER_ELIMINAR": "#C0C0C0"        # Gris plata
-        }
-
-        self.task_type_colors = {
-        "TASK_TYPE_IDEA": "#FF8C00",      # Naranja oscuro (#FF8C00) - Inspiración cálida  
-        "TASK_TYPE_TAREA": "#FF1493",     # Rosa profundo (#FF1493) - ¡Hazlo ya!  
-        "TASK_TYPE_PROYECTO": "#00BFFF"   # Azul cielo (#00BFFF) - Visión amplia  
-        }
-        
         # Variables para el gutter
         self.gutter_frame = None
         self.gutter_canvas = None
         self.gutter_visible = False
-        self.current_line_roles = {}  # Diccionario para mapear líneas a sus roles
-
-        self.selected_roles = set()
-        self.selected_eisenhowers = set()
-        self.selected_task_types = set()
-        self.theme_mode = "dark"
+        self.current_line_roles = {}
 
         self.setup_ui()
         self.load_notes_list()
+    
+    def set_theme(self, theme_mode):
+        """Configura el tema claro/oscuro de la aplicación"""
+        self.theme_mode = theme_mode
+        
+        if theme_mode == "light":
+            self.bg_color = "#F5F5F5"
+            self.fg_color = "#2E2E2E"
+            self.panel_bg = "#E0E0E0"
+            self.accent_color = "#1E88E5"
+            self.text_input_bg = "#FFFFFF"
+            self.border_color = "#BDBDBD"
+        else:  # dark theme
+            self.bg_color = "#2E2E2E"
+            self.fg_color = "#F5F5F5"
+            self.panel_bg = "#3A3A3A"
+            self.accent_color = "#007AFF"
+            self.text_input_bg = "#444444"
+            self.border_color = "#555555"
+        
+        # Reconfigurar los colores de los roles
+        for role in self.role_colors:
+            self.note_content_display.tag_config(role, foreground=self.role_colors[role])
+        
+        # Reconfigurar los colores de Eisenhower
+        for tag, color in self.eisenhower_tag_colors.items():
+            self.note_content_display.tag_config(tag, foreground=color)
+        
+        # Reconfigurar el texto general
+        self.note_content_display.tag_config("general_text", foreground=self.fg_color)
+        
+        # Reconstruir la interfaz
+        self.setup_ui()
+        self.load_notes_list()
+        if self.active_note_title:
+            self.show_all_content()
+    
     def setup_ui(self):
-        # Destruir todos los widgets existentes antes de recrear la UI
         for widget in self.master.winfo_children():
             widget.destroy()
 
         self.master.config(bg=self.bg_color)
 
-        # Configuración de estilos (se mantiene igual)
         self.style.configure('.', background=self.bg_color, foreground=self.fg_color)
         self.style.configure('TFrame', background=self.panel_bg)
         self.style.configure('TButton',
@@ -702,21 +752,33 @@ class NotesApp:
         self.style.map('TButton',
                         background=[('active', self.accent_color)],
                         foreground=[('active', 'white')])
+        
+        # Configuración específica del Treeview
+        self.style.configure("Treeview", 
+                            background=self.text_input_bg,
+                            foreground=self.fg_color,
+                            fieldbackground=self.text_input_bg,
+                            borderwidth=0)
+        self.style.configure("Treeview.Heading",
+                            background=self.panel_bg,
+                            foreground=self.fg_color,
+                            relief="flat")
+        self.style.map('Treeview', 
+                      background=[('selected', self.accent_color)],
+                      foreground=[('selected', 'white')])
 
-        # --- Paneles principales ---
         main_pane = tk.PanedWindow(self.master, orient=tk.HORIZONTAL, bg=self.bg_color, sashrelief=tk.RAISED)
         main_pane.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Left Frame (Sidebar) - Se mantiene igual
         left_frame = ttk.Frame(main_pane, style='TFrame', padding=(5, 5, 5, 5))
         main_pane.add(left_frame, width=300)
 
         tk.Label(left_frame, text="Notas", font=("Helvetica Neue", 11, "bold"), bg=self.panel_bg, fg=self.fg_color).pack(pady=(0, 5))
 
-        self.notes_tree = ttk.Treeview(left_frame, show="tree", selectmode="browse", style="Custom.Treeview")
+        self.notes_tree = ttk.Treeview(left_frame, show="tree", selectmode="browse")
         self.notes_tree.pack(pady=2, fill=tk.BOTH, expand=True)
         self.notes_tree.bind("<<TreeviewSelect>>", self.on_note_tree_select)
-
+    
         button_frame_left = ttk.Frame(left_frame, style='TFrame')
         button_frame_left.pack(fill=tk.X, pady=3)
         ttk.Button(button_frame_left, text="Recargar", command=self.load_notes_list).pack(side=tk.TOP, fill=tk.X, pady=1)
@@ -737,7 +799,7 @@ class NotesApp:
 
         tk.Label(right_frame, text="Contenido de la Nota", font=("Helvetica Neue", 11, "bold"), bg=self.panel_bg, fg=self.fg_color).pack(pady=(0, 5))
 
-        # Área de contenido principal - MODIFICACIÓN IMPORTANTE
+        # Área de contenido principal
         self.text_container = ttk.Frame(right_frame)
         self.text_container.pack(pady=2, fill=tk.BOTH, expand=True)
 
@@ -759,7 +821,7 @@ class NotesApp:
             self.note_content_display.tag_config(tag, foreground=color)
         self.note_content_display.tag_config("general_text", foreground=self.fg_color)
 
-        # Resto de la interfaz (se mantiene igual)
+        # Resto de la interfaz
         ttk.Button(right_frame, text="Guardar", command=self.save_current_note).pack(pady=2, fill=tk.X)
         ttk.Button(right_frame, text="Programar en Calendario", command=self.schedule_task_in_calendar).pack(pady=2, fill=tk.X)
 
@@ -840,44 +902,51 @@ class NotesApp:
             self.note_content_display.tag_config(tag, foreground=color)
         self.note_content_display.tag_config("general_text", foreground=self.fg_color)
 
-    def filter_notes_by_task_type(self, task_type):
-        """Filtra las líneas por tipo de tarea y maneja la selección/deselección"""
-        if task_type in self.selected_task_types:
-            self.selected_task_types.remove(task_type)
-        else:
-            self.selected_task_types.add(task_type)
+    def update_scroll_visibility(self, *args):
+        content = self.note_content_display.get(1.0, tk.END)
+        line_count = int(self.note_content_display.index('end-1c').split('.')[0])
         
-        self.apply_role_filters()  # Reutiliza la lógica de filtrado principal
+        if line_count > 20 or len(content) > 1000:
+            self.note_content_display.config(yscrollcommand=self.note_content_display.yview)
+        else:
+            self.note_content_display.config(yscrollcommand=None)
+
+        def filter_notes_by_task_type(self, task_type):
+            """Filtra las líneas por tipo de tarea y maneja la selección/deselección"""
+            if task_type in self.selected_task_types:
+                self.selected_task_types.remove(task_type)
+            else:
+                self.selected_task_types.add(task_type)
+            
+            self.apply_role_filters()  # Reutiliza la lógica de filtrado principal
         
     def setup_gutter(self):
-        """Configura el área del gutter para mostrar las viñetas de roles"""
-        # Destruir el gutter existente si hay uno
         if hasattr(self, 'gutter_frame') and self.gutter_frame:
             self.gutter_frame.destroy()
+
+        self.note_content_display.pack_forget()
         
-        # Crear el frame del gutter (ancho fijo de 30px)
         self.gutter_frame = tk.Frame(self.text_container, width=30, bg=self.panel_bg)
         self.gutter_frame.pack(side=tk.LEFT, fill=tk.Y)
         
-        # Crear el canvas del gutter
         self.gutter_canvas = tk.Canvas(self.gutter_frame, bg=self.panel_bg, width=30, 
                                      highlightthickness=0, bd=0)
         self.gutter_canvas.pack(fill=tk.BOTH, expand=True)
         
-        # Configurar eventos de scroll sincronizados
+        self.note_content_display.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
         self.note_content_display.bind("<MouseWheel>", self.sync_scroll)
-        self.note_content_display.bind("<Button-4>", self.sync_scroll)  # Linux up
-        self.note_content_display.bind("<Button-5>", self.sync_scroll)  # Linux down
+        self.note_content_display.bind("<Button-4>", self.sync_scroll)
+        self.note_content_display.bind("<Button-5>", self.sync_scroll)
         self.gutter_canvas.bind("<MouseWheel>", self.sync_scroll)
         self.gutter_canvas.bind("<Button-4>", self.sync_scroll)
         self.gutter_canvas.bind("<Button-5>", self.sync_scroll)
         
-        # Actualizar el gutter cuando haya cambios
         self.note_content_display.bind("<Configure>", self.update_gutter)
         self.note_content_display.bind("<Key>", lambda e: self.master.after(10, self.update_gutter))
         
         self.gutter_visible = True
-        self.update_gutter()  # Actualizar inmediatamente
+        self.update_gutter()
 
     def sync_scroll(self, event):
         """Sincroniza el scroll entre el texto y el gutter"""
