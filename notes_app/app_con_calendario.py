@@ -1035,9 +1035,9 @@ class NotesApp:
                 if not bbox:
                     continue
                     
-                # Guardar o invertir el orden según lo que tengamos almacenado
+                # Guardar el orden original (no invertido)
                 if line_num not in self.gutter_role_order:
-                    self.gutter_role_order[line_num] = list(reversed(roles))  # Orden inverso inicial
+                    self.gutter_role_order[line_num] = roles.copy()
                 current_order = self.gutter_role_order[line_num]
                 
                 y_pos = bbox[1] + 5
@@ -1045,7 +1045,8 @@ class NotesApp:
                 spacing = 10
                 start_x = 5
                 
-                for i, role in enumerate(current_order):
+                # Dibujar en orden inverso (primera viñeta a la derecha)
+                for i, role in enumerate(reversed(current_order)):
                     color = self.role_colors.get(role, self.fg_color)
                     tag_name = f"gutter_{line_num}_{i}"
                     
@@ -1059,51 +1060,47 @@ class NotesApp:
                         fill=color, outline=color, tags=tag_name
                     )
                     
-                    # Al hacer clic: intercambiar viñetas y cambiar color
+                    # Al hacer clic: intercambiar viñetas
                     self.gutter_canvas.tag_bind(tag_name, "<Button-1>", 
                         lambda e, r=role, l=line_num: self.handle_gutter_click(r, l))
 
     def handle_gutter_click(self, clicked_role, line_num):
-        """Maneja el clic en las viñetas: intercambia orden y cambia color permanentemente"""
-        # 1. Obtener el texto actual de la línea
+        """Maneja el clic en las viñetas: intercambia la posición del rol clickeado con el primero"""
+        if line_num not in self.gutter_role_order:
+            return
+        
+        current_order = self.gutter_role_order[line_num]
+        
+        # Encontrar el índice del rol clickeado
+        try:
+            clicked_index = current_order.index(clicked_role)
+        except ValueError:
+            return
+        
+        # Intercambiar con el primer rol
+        current_order[0], current_order[clicked_index] = current_order[clicked_index], current_order[0]
+        
+        # Actualizar el diccionario
+        self.gutter_role_order[line_num] = current_order
+        
+        # Reconstruir la línea
         line_index = f"{line_num}.0"
         line_end = f"{line_num}.end"
         line_text = self.note_content_display.get(line_index, line_end)
         
-        # 2. Obtener clasificaciones actuales
         classifications = self.notes_manager.get_line_classification(line_text)
-        current_roles = [name for typ, name in classifications if typ == "role"]
+        new_line = self.rebuild_line_with_roles(line_text, classifications, current_order)
         
-        if not current_roles:
-            return  # No hay roles para intercambiar
-        
-        # 3. Encontrar el índice del rol clickeado
-        try:
-            idx = current_roles.index(clicked_role)
-        except ValueError:
-            return  # Rol no encontrado
-        
-        # 4. Intercambiar con el primer rol
-        current_roles[0], current_roles[idx] = current_roles[idx], current_roles[0]
-        
-        # 5. Guardar el nuevo orden
-        self.gutter_role_order[line_num] = current_roles
-        
-        # 6. Reconstruir la línea con los roles en el nuevo orden
-        new_line = self.rebuild_line_with_roles(line_text, classifications, current_roles)
-        
-        # 7. Actualizar el contenido de la línea
+        # Actualizar el contenido
         self.note_content_display.delete(line_index, line_end)
         self.note_content_display.insert(line_index, new_line)
         
-        # 8. Aplicar el color del primer rol
-        first_role = current_roles[0]
+        # Aplicar el color del nuevo primer rol
+        first_role = current_order[0]
         self.note_content_display.tag_add(first_role, line_index, line_end)
         
-        # 9. Actualizar el gutter
+        # Actualizar gutter y guardar
         self.update_gutter()
-        
-        # 10. Guardar los cambios inmediatamente
         self.save_current_note()
 
     def rebuild_line_with_roles(self, line_text, classifications, new_role_order):
