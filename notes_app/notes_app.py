@@ -28,24 +28,27 @@ class NotesApp(ttk.Frame):
 			"Diseñador": "#FF375F", "TLP": "#FF9F0A", "Ropa/Accesorios": "#FFD60A"
 		}
 		self.eisenhower_colors = {
-			"HACER_AHORA": "#FF3B30", "PLANIFICAR": "#FF9500", "DELEGAR": "#5856D6", "ELIMINAR": "#8E8E93"
+			"Hacer Ahora": "#FF3B30", "Planificar": "#FF9500", "Delegar": "#5856D6", "Eliminar": "#8E8E93"
 		}
 		self.type_colors = {
-			"IDEA": "#5AC8FA", "PROYECTO": "#AF52DE", "TAREA": "#FFCC00"
+			"Idea": "#5AC8FA", "Proyecto": "#AF52DE", "Tarea": "#FFCC00"
 		}
 
-		# Lista de notas
+		# Lista de notas (en la fila 1 para no solaparse con los botones de acción)
 		self.notes_listbox = tk.Listbox(self, width=30, height=20, font=("San Francisco", 13))
-		self.notes_listbox.grid(row=0, column=0, rowspan=8, padx=10, pady=10, sticky="ns")
+		self.notes_listbox.grid(row=1, column=0, rowspan=8, padx=10, pady=10, sticky="ns")
 		self.notes_listbox.bind("<<ListboxSelect>>", self._on_note_selected)
 
-		# Botones principales (a la izquierda)
-		self.add_button = ttk.Button(self, text="Nueva Nota", command=self._add_note)
-		self.add_button.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-		self.save_button = ttk.Button(self, text="Guardar Nota", command=self._save_note)
-		self.save_button.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
-		self.delete_button = ttk.Button(self, text="Eliminar Nota", command=self._delete_note)
-		self.delete_button.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+		# Botones principales
+		self.action_buttons_frame = ttk.Frame(self)
+		self.action_buttons_frame.grid(row=0, column=0, padx=10, pady=(5,0), sticky="ew", columnspan=2)
+  
+		self.add_button = ttk.Button(self.action_buttons_frame, text="➕", width=3, command=self._add_note, style="TButton")
+		self.add_button.pack(side=tk.LEFT, padx=4)
+		self.save_button = ttk.Button(self.action_buttons_frame, text="💾", width=3, command=self._save_note, style="TButton")
+		self.save_button.pack(side=tk.LEFT, padx=4)
+		self.delete_button = ttk.Button(self.action_buttons_frame, text="🗑", width=3, command=self._delete_note, style="TButton")
+		self.delete_button.pack(side=tk.LEFT, padx=4)
 
 		# Frame para colorear todo por...
 		self.colorear_frame = ttk.Frame(self)
