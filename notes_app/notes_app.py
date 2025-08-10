@@ -2,8 +2,6 @@
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, simpledialog, Toplevel
 
-
-
 class NotesApp(ttk.Frame):
 
 	def __init__(self, parent, notes_manager, *args, **kwargs):
@@ -58,32 +56,38 @@ class NotesApp(ttk.Frame):
 		ttk.Button(self.colorear_frame, text="Tipo", command=self._color_all_by_type).pack(side=tk.LEFT, padx=1)
 
 		# Área de texto con scroll
-		self.text_area = scrolledtext.ScrolledText(self, width=60, height=20, wrap=tk.WORD, font=("San Francisco", 13))
+		self.text_area = scrolledtext.ScrolledText(self, width=60, height=20, wrap=tk.WORD, font=("San Francisco", 13), padx=16, pady=12)
 		self.text_area.grid(row=2, column=2, rowspan=1, padx=10, pady=10, sticky="nsew")
 
 		# Botones de filtro individuales para cada valor de roles (debajo del área de texto)
 		self.filter_roles_frame = ttk.Frame(self)
-		self.filter_roles_frame.grid(row=3, column=2, padx=10, pady=(0,0), sticky="ew")
+		self.filter_roles_frame.grid(row=3, column=2, padx=10, pady=(10,0), sticky="ew")
 		ttk.Label(self.filter_roles_frame, text="Filtrar por Rol:", font=("San Francisco", 11, "bold")).pack(side=tk.LEFT, padx=2)
+		self.role_filter_buttons = []
 		for role in self.role_colors:
-			btn = ttk.Button(self.filter_roles_frame, text=role, command=lambda r=role: self._filter_by_role(r))
+			btn = tk.Button(self.filter_roles_frame, text=role, command=lambda r=role: self._filter_by_role(r), fg=self.role_colors[role], font=("San Francisco", 11, "bold"), relief=tk.GROOVE)
 			btn.pack(side=tk.LEFT, padx=1)
+			self.role_filter_buttons.append(btn)
 
 		# Botones de filtro individuales para cada valor de Eisenhower (debajo del área de texto)
 		self.filter_eisenhower_frame = ttk.Frame(self)
-		self.filter_eisenhower_frame.grid(row=4, column=2, padx=10, pady=(0,0), sticky="ew")
+		self.filter_eisenhower_frame.grid(row=4, column=2, padx=10, pady=(10,0), sticky="ew")
 		ttk.Label(self.filter_eisenhower_frame, text="Filtrar por Eisenhower:", font=("San Francisco", 11, "bold")).pack(side=tk.LEFT, padx=2)
+		self.eisenhower_filter_buttons = []
 		for key in self.eisenhower_colors:
-			btn = ttk.Button(self.filter_eisenhower_frame, text=key, command=lambda k=key: self._filter_by_eisenhower(k))
+			btn = tk.Button(self.filter_eisenhower_frame, text=key, command=lambda k=key: self._filter_by_eisenhower(k), fg=self.eisenhower_colors[key], font=("San Francisco", 11, "bold"), relief=tk.GROOVE)
 			btn.pack(side=tk.LEFT, padx=1)
+			self.eisenhower_filter_buttons.append(btn)
 
 		# Botones de filtro individuales para cada tipo (debajo del área de texto)
 		self.filter_types_frame = ttk.Frame(self)
-		self.filter_types_frame.grid(row=5, column=2, padx=10, pady=(0,10), sticky="ew")
+		self.filter_types_frame.grid(row=5, column=2, padx=10, pady=(10,10), sticky="ew")
 		ttk.Label(self.filter_types_frame, text="Filtrar por Tipo:", font=("San Francisco", 11, "bold")).pack(side=tk.LEFT, padx=2)
+		self.type_filter_buttons = []
 		for key in self.type_colors:
-			btn = ttk.Button(self.filter_types_frame, text=key, command=lambda k=key: self._filter_by_type(k))
+			btn = tk.Button(self.filter_types_frame, text=key, command=lambda k=key: self._filter_by_type(k), fg=self.type_colors[key], font=("San Francisco", 11, "bold"), relief=tk.GROOVE)
 			btn.pack(side=tk.LEFT, padx=1)
+			self.type_filter_buttons.append(btn)
 
 		self.grid_rowconfigure(6, weight=1)
 		self.grid_columnconfigure(2, weight=1)
@@ -116,6 +120,7 @@ class NotesApp(ttk.Frame):
 			border = "#3A3A3C"
 			text_main = "#F2F2F7"
 			text_secondary = "#A1A1AA"
+			btn_bg = "#232325"
 		else:
 			bg_main = "#F5F5F7"
 			bg_panel = "#FFFFFF"
@@ -123,6 +128,7 @@ class NotesApp(ttk.Frame):
 			border = "#D1D1D6"
 			text_main = "#1C1C1E"
 			text_secondary = "#636366"
+			btn_bg = "#FFFFFF"
 
 		style = ttk.Style()
 		style.theme_use('clam')
@@ -141,6 +147,16 @@ class NotesApp(ttk.Frame):
 			self.notes_listbox.config(bg=bg_panel, fg=text_main, highlightbackground=border, selectbackground=accent, selectforeground="#fff")
 		if hasattr(self, 'text_area'):
 			self.text_area.config(bg=bg_panel, fg=text_main, insertbackground=accent, highlightbackground=border)
+		# Actualizar fondo de los botones de filtro
+		if hasattr(self, 'role_filter_buttons'):
+			for btn in self.role_filter_buttons:
+				btn.config(bg=btn_bg, activebackground=border)
+		if hasattr(self, 'eisenhower_filter_buttons'):
+			for btn in self.eisenhower_filter_buttons:
+				btn.config(bg=btn_bg, activebackground=border)
+		if hasattr(self, 'type_filter_buttons'):
+			for btn in self.type_filter_buttons:
+				btn.config(bg=btn_bg, activebackground=border)
 
 	def _color_all_by_role(self):
 		self._show_note_with_highlight_filter(self.text_area.get(1.0, tk.END), "role", None, color_all=True)

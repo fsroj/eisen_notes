@@ -1,4 +1,3 @@
-# Modular imports
 import tkinter as tk
 from notes_manager import NotesManager
 from notes_app import NotesApp
