@@ -5,6 +5,7 @@ from tkinter import ttk, scrolledtext, messagebox, simpledialog, Toplevel
 
 
 class NotesApp(ttk.Frame):
+
 	def __init__(self, parent, notes_manager, *args, **kwargs):
 		super().__init__(parent, *args, **kwargs)
 		self.notes_manager = notes_manager
@@ -14,36 +15,6 @@ class NotesApp(ttk.Frame):
 		self._refresh_notes_list()
 
 	def _build_ui(self):
-		# Lista de notas
-		self.notes_listbox = tk.Listbox(self, width=30, height=20, font=("San Francisco", 13))
-		self.notes_listbox.grid(row=0, column=0, rowspan=8, padx=10, pady=10, sticky="ns")
-		self.notes_listbox.bind("<<ListboxSelect>>", self._on_note_selected)
-
-		# Botones principales
-		self.add_button = ttk.Button(self, text="Nueva Nota", command=self._add_note)
-		self.add_button.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-		self.save_button = ttk.Button(self, text="Guardar Nota", command=self._save_note)
-		self.save_button.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
-		self.delete_button = ttk.Button(self, text="Eliminar Nota", command=self._delete_note)
-		self.delete_button.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
-		self.filter_button = ttk.Button(self, text="Filtrar Nota", command=self._filter_note)
-		self.filter_button.grid(row=3, column=1, padx=5, pady=5, sticky="ew")
-
-		# Botones Mostrar Todo
-		self.show_roles_button = ttk.Button(self, text="Mostrar Roles", command=self._show_all_roles)
-		self.show_roles_button.grid(row=4, column=1, padx=5, pady=5, sticky="ew")
-		self.show_eisenhower_button = ttk.Button(self, text="Mostrar Eisenhower", command=self._show_all_eisenhower)
-		self.show_eisenhower_button.grid(row=5, column=1, padx=5, pady=5, sticky="ew")
-		self.show_types_button = ttk.Button(self, text="Mostrar Tipos", command=self._show_all_types)
-		self.show_types_button.grid(row=6, column=1, padx=5, pady=5, sticky="ew")
-
-		# Área de texto con scroll
-		self.text_area = scrolledtext.ScrolledText(self, width=60, height=20, wrap=tk.WORD, font=("San Francisco", 13))
-		self.text_area.grid(row=0, column=2, rowspan=8, padx=10, pady=10, sticky="nsew")
-
-		self.grid_rowconfigure(7, weight=1)
-		self.grid_columnconfigure(2, weight=1)
-
 		# Colores Apple-like para tags
 		self.role_colors = {
 			"Programador": "#007AFF", "Social": "#34C759", "Tesista": "#AF52DE", "General": "#FF9500",
@@ -57,6 +28,58 @@ class NotesApp(ttk.Frame):
 			"IDEA": "#5AC8FA", "PROYECTO": "#AF52DE", "TAREA": "#FFCC00"
 		}
 
+		# Lista de notas
+		self.notes_listbox = tk.Listbox(self, width=30, height=20, font=("San Francisco", 13))
+		self.notes_listbox.grid(row=0, column=0, rowspan=8, padx=10, pady=10, sticky="ns")
+		self.notes_listbox.bind("<<ListboxSelect>>", self._on_note_selected)
+
+		# Botones principales (a la izquierda)
+		self.add_button = ttk.Button(self, text="Nueva Nota", command=self._add_note)
+		self.add_button.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+		self.save_button = ttk.Button(self, text="Guardar Nota", command=self._save_note)
+		self.save_button.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+		self.delete_button = ttk.Button(self, text="Eliminar Nota", command=self._delete_note)
+		self.delete_button.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+
+		# Frame para colorear todo por...
+		self.colorear_frame = ttk.Frame(self)
+		self.colorear_frame.grid(row=1, column=2, padx=10, pady=(0,0), sticky="ew")
+		ttk.Label(self.colorear_frame, text="Colorear todo por:", font=("San Francisco", 11, "bold")).pack(side=tk.LEFT, padx=2)
+		ttk.Button(self.colorear_frame, text="Rol", command=self._color_all_by_role).pack(side=tk.LEFT, padx=1)
+		ttk.Button(self.colorear_frame, text="Eisenhower", command=self._color_all_by_eisenhower).pack(side=tk.LEFT, padx=1)
+		ttk.Button(self.colorear_frame, text="Tipo", command=self._color_all_by_type).pack(side=tk.LEFT, padx=1)
+
+		# Área de texto con scroll
+		self.text_area = scrolledtext.ScrolledText(self, width=60, height=20, wrap=tk.WORD, font=("San Francisco", 13))
+		self.text_area.grid(row=2, column=2, rowspan=1, padx=10, pady=10, sticky="nsew")
+
+		# Botones de filtro individuales para cada valor de roles (debajo del área de texto)
+		self.filter_roles_frame = ttk.Frame(self)
+		self.filter_roles_frame.grid(row=3, column=2, padx=10, pady=(0,0), sticky="ew")
+		ttk.Label(self.filter_roles_frame, text="Filtrar por Rol:", font=("San Francisco", 11, "bold")).pack(side=tk.LEFT, padx=2)
+		for role in self.role_colors:
+			btn = ttk.Button(self.filter_roles_frame, text=role, command=lambda r=role: self._filter_by_role(r))
+			btn.pack(side=tk.LEFT, padx=1)
+
+		# Botones de filtro individuales para cada valor de Eisenhower (debajo del área de texto)
+		self.filter_eisenhower_frame = ttk.Frame(self)
+		self.filter_eisenhower_frame.grid(row=4, column=2, padx=10, pady=(0,0), sticky="ew")
+		ttk.Label(self.filter_eisenhower_frame, text="Filtrar por Eisenhower:", font=("San Francisco", 11, "bold")).pack(side=tk.LEFT, padx=2)
+		for key in self.eisenhower_colors:
+			btn = ttk.Button(self.filter_eisenhower_frame, text=key, command=lambda k=key: self._filter_by_eisenhower(k))
+			btn.pack(side=tk.LEFT, padx=1)
+
+		# Botones de filtro individuales para cada tipo (debajo del área de texto)
+		self.filter_types_frame = ttk.Frame(self)
+		self.filter_types_frame.grid(row=5, column=2, padx=10, pady=(0,10), sticky="ew")
+		ttk.Label(self.filter_types_frame, text="Filtrar por Tipo:", font=("San Francisco", 11, "bold")).pack(side=tk.LEFT, padx=2)
+		for key in self.type_colors:
+			btn = ttk.Button(self.filter_types_frame, text=key, command=lambda k=key: self._filter_by_type(k))
+			btn.pack(side=tk.LEFT, padx=1)
+
+		self.grid_rowconfigure(6, weight=1)
+		self.grid_columnconfigure(2, weight=1)
+
 		# Configurar tags de colores
 		for role, color in self.role_colors.items():
 			self.text_area.tag_config(f"role_{role}", foreground=color)
@@ -66,6 +89,58 @@ class NotesApp(ttk.Frame):
 			self.text_area.tag_config(f"type_{key}", foreground=color)
 
 		self.text_area.tag_config("default", foreground="#1C1C1E")
+
+	def _color_all_by_role(self):
+		self._show_note_with_highlight_filter(self.text_area.get(1.0, tk.END), "role", None, color_all=True)
+
+	def _color_all_by_eisenhower(self):
+		self._show_note_with_highlight_filter(self.text_area.get(1.0, tk.END), "eisenhower", None, color_all=True)
+
+	def _color_all_by_type(self):
+		self._show_note_with_highlight_filter(self.text_area.get(1.0, tk.END), "type", None, color_all=True)
+
+	def _show_note_with_highlight_filter(self, content, filter_type, filter_value, color_all=False):
+		self.text_area.config(state="normal")
+		self.text_area.delete(1.0, tk.END)
+		lines = content.split("\n")
+		for i, line in enumerate(lines):
+			start = f"{i+1}.0"
+			end = f"{i+1}.end"
+			tag = None
+			if color_all:
+				if filter_type == "role":
+					for role in self.role_colors:
+						if f"[{role}]" in line:
+							tag = f"role_{role}"
+							break
+				elif filter_type == "eisenhower":
+					for key in self.eisenhower_colors:
+						if f"[E:{key[0]}]" in line or f"[E:{key}]" in line:
+							tag = f"eisen_{key}"
+							break
+				elif filter_type == "type":
+					for key in self.type_colors:
+						if f"[T:{key}]" in line:
+							tag = f"type_{key}"
+							break
+			else:
+				if filter_type == "role":
+					if filter_value and f"[{filter_value}]" in line:
+						tag = f"role_{filter_value}"
+				elif filter_type == "eisenhower":
+					if filter_value and (f"[E:{filter_value[0]}]" in line or f"[E:{filter_value}]" in line):
+						tag = f"eisen_{filter_value}"
+				elif filter_type == "type":
+					if filter_value and f"[T:{filter_value}]" in line:
+						tag = f"type_{filter_value}"
+			if not color_all and tag is None:
+				continue  # filtrar: no mostrar líneas no relevantes
+			self.text_area.insert(tk.END, line + "\n")
+			if tag:
+				self.text_area.tag_add(tag, start, end)
+			else:
+				self.text_area.tag_add("default", start, end)
+		self.text_area.config(state="normal")
 
 
 	def _refresh_notes_list(self):
