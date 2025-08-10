@@ -15,25 +15,13 @@ class NotesApp(ttk.Frame):
 		self._refresh_notes_list()
 
 	def _build_ui(self):
-		# Paleta Apple-like y fondo elegante
-		bg_main = "#F5F5F7"  # fondo general
-		bg_panel = "#FFFFFF"  # paneles
-		accent = "#007AFF"    # azul Apple
-		border = "#D1D1D6"
-		text_main = "#1C1C1E"
-		text_secondary = "#636366"
+		# Inicializar modo
+		self._current_mode = "light"
+		self._set_theme(self._current_mode)
 
-		style = ttk.Style()
-		style.theme_use('clam')
-		style.configure("TFrame", background=bg_main)
-		style.configure("TLabel", background=bg_main, foreground=text_main, font=("San Francisco", 12))
-		style.configure("TButton", font=("San Francisco", 12), background=bg_panel, foreground=accent, borderwidth=0, focusthickness=2, focuscolor=accent)
-		style.map("TButton",
-			background=[('active', accent), ('!active', bg_panel)],
-			foreground=[('active', "#fff"), ('!active', accent)])
-
-		self.configure(style="TFrame")
-		self.parent.configure(bg=bg_main)
+		# Botón para alternar modo claro/oscuro con ícono minimalista
+		self.theme_btn = ttk.Button(self, text="☀", width=3, command=self._toggle_theme, style="TButton")
+		self.theme_btn.grid(row=0, column=2, padx=10, pady=(10,0), sticky="ne")
 
 		# Colores Apple-like para tags
 		self.role_colors = {
@@ -42,59 +30,59 @@ class NotesApp(ttk.Frame):
 			"Diseñador": "#FF375F", "TLP": "#FF9F0A", "Ropa/Accesorios": "#FFD60A"
 		}
 		self.eisenhower_colors = {
-			"HACER_AHORA": "#FF3B30", "PLANIFICAR": "#34C759", "DELEGAR": "#FF9500", "ELIMINAR": "#8E8E93"
+			"HACER_AHORA": "#FF3B30", "PLANIFICAR": "#FF9500", "DELEGAR": "#5856D6", "ELIMINAR": "#8E8E93"
 		}
 		self.type_colors = {
 			"IDEA": "#5AC8FA", "PROYECTO": "#AF52DE", "TAREA": "#FFCC00"
 		}
 
 		# Lista de notas
-		self.notes_listbox = tk.Listbox(self, width=30, height=20, font=("San Francisco", 13), bg=bg_panel, fg=text_main, highlightbackground=border, selectbackground=accent, selectforeground="#fff", relief=tk.FLAT, borderwidth=1)
+		self.notes_listbox = tk.Listbox(self, width=30, height=20, font=("San Francisco", 13))
 		self.notes_listbox.grid(row=0, column=0, rowspan=8, padx=10, pady=10, sticky="ns")
 		self.notes_listbox.bind("<<ListboxSelect>>", self._on_note_selected)
 
 		# Botones principales (a la izquierda)
-		self.add_button = ttk.Button(self, text="Nueva Nota", command=self._add_note, style="TButton")
+		self.add_button = ttk.Button(self, text="Nueva Nota", command=self._add_note)
 		self.add_button.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-		self.save_button = ttk.Button(self, text="Guardar Nota", command=self._save_note, style="TButton")
+		self.save_button = ttk.Button(self, text="Guardar Nota", command=self._save_note)
 		self.save_button.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
-		self.delete_button = ttk.Button(self, text="Eliminar Nota", command=self._delete_note, style="TButton")
+		self.delete_button = ttk.Button(self, text="Eliminar Nota", command=self._delete_note)
 		self.delete_button.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
 
 		# Frame para colorear todo por...
-		self.colorear_frame = ttk.Frame(self, style="TFrame")
+		self.colorear_frame = ttk.Frame(self)
 		self.colorear_frame.grid(row=1, column=2, padx=10, pady=(0,0), sticky="ew")
-		ttk.Label(self.colorear_frame, text="Colorear todo por:", font=("San Francisco", 11, "bold"), background=bg_main, foreground=text_secondary).pack(side=tk.LEFT, padx=2)
-		ttk.Button(self.colorear_frame, text="Rol", command=self._color_all_by_role, style="TButton").pack(side=tk.LEFT, padx=1)
-		ttk.Button(self.colorear_frame, text="Eisenhower", command=self._color_all_by_eisenhower, style="TButton").pack(side=tk.LEFT, padx=1)
-		ttk.Button(self.colorear_frame, text="Tipo", command=self._color_all_by_type, style="TButton").pack(side=tk.LEFT, padx=1)
+		ttk.Label(self.colorear_frame, text="Colorear todo por:", font=("San Francisco", 11, "bold")).pack(side=tk.LEFT, padx=2)
+		ttk.Button(self.colorear_frame, text="Rol", command=self._color_all_by_role).pack(side=tk.LEFT, padx=1)
+		ttk.Button(self.colorear_frame, text="Eisenhower", command=self._color_all_by_eisenhower).pack(side=tk.LEFT, padx=1)
+		ttk.Button(self.colorear_frame, text="Tipo", command=self._color_all_by_type).pack(side=tk.LEFT, padx=1)
 
 		# Área de texto con scroll
-		self.text_area = scrolledtext.ScrolledText(self, width=60, height=20, wrap=tk.WORD, font=("San Francisco", 13), bg=bg_panel, fg=text_main, insertbackground=accent, highlightbackground=border, relief=tk.FLAT, borderwidth=1)
+		self.text_area = scrolledtext.ScrolledText(self, width=60, height=20, wrap=tk.WORD, font=("San Francisco", 13))
 		self.text_area.grid(row=2, column=2, rowspan=1, padx=10, pady=10, sticky="nsew")
 
 		# Botones de filtro individuales para cada valor de roles (debajo del área de texto)
-		self.filter_roles_frame = ttk.Frame(self, style="TFrame")
+		self.filter_roles_frame = ttk.Frame(self)
 		self.filter_roles_frame.grid(row=3, column=2, padx=10, pady=(0,0), sticky="ew")
-		ttk.Label(self.filter_roles_frame, text="Filtrar por Rol:", font=("San Francisco", 11, "bold"), background=bg_main, foreground=text_secondary).pack(side=tk.LEFT, padx=2)
+		ttk.Label(self.filter_roles_frame, text="Filtrar por Rol:", font=("San Francisco", 11, "bold")).pack(side=tk.LEFT, padx=2)
 		for role in self.role_colors:
-			btn = ttk.Button(self.filter_roles_frame, text=role, command=lambda r=role: self._filter_by_role(r), style="TButton")
+			btn = ttk.Button(self.filter_roles_frame, text=role, command=lambda r=role: self._filter_by_role(r))
 			btn.pack(side=tk.LEFT, padx=1)
 
 		# Botones de filtro individuales para cada valor de Eisenhower (debajo del área de texto)
-		self.filter_eisenhower_frame = ttk.Frame(self, style="TFrame")
+		self.filter_eisenhower_frame = ttk.Frame(self)
 		self.filter_eisenhower_frame.grid(row=4, column=2, padx=10, pady=(0,0), sticky="ew")
-		ttk.Label(self.filter_eisenhower_frame, text="Filtrar por Eisenhower:", font=("San Francisco", 11, "bold"), background=bg_main, foreground=text_secondary).pack(side=tk.LEFT, padx=2)
+		ttk.Label(self.filter_eisenhower_frame, text="Filtrar por Eisenhower:", font=("San Francisco", 11, "bold")).pack(side=tk.LEFT, padx=2)
 		for key in self.eisenhower_colors:
-			btn = ttk.Button(self.filter_eisenhower_frame, text=key, command=lambda k=key: self._filter_by_eisenhower(k), style="TButton")
+			btn = ttk.Button(self.filter_eisenhower_frame, text=key, command=lambda k=key: self._filter_by_eisenhower(k))
 			btn.pack(side=tk.LEFT, padx=1)
 
 		# Botones de filtro individuales para cada tipo (debajo del área de texto)
-		self.filter_types_frame = ttk.Frame(self, style="TFrame")
+		self.filter_types_frame = ttk.Frame(self)
 		self.filter_types_frame.grid(row=5, column=2, padx=10, pady=(0,10), sticky="ew")
-		ttk.Label(self.filter_types_frame, text="Filtrar por Tipo:", font=("San Francisco", 11, "bold"), background=bg_main, foreground=text_secondary).pack(side=tk.LEFT, padx=2)
+		ttk.Label(self.filter_types_frame, text="Filtrar por Tipo:", font=("San Francisco", 11, "bold")).pack(side=tk.LEFT, padx=2)
 		for key in self.type_colors:
-			btn = ttk.Button(self.filter_types_frame, text=key, command=lambda k=key: self._filter_by_type(k), style="TButton")
+			btn = ttk.Button(self.filter_types_frame, text=key, command=lambda k=key: self._filter_by_type(k))
 			btn.pack(side=tk.LEFT, padx=1)
 
 		self.grid_rowconfigure(6, weight=1)
@@ -108,7 +96,51 @@ class NotesApp(ttk.Frame):
 		for key, color in self.type_colors.items():
 			self.text_area.tag_config(f"type_{key}", foreground=color)
 
-		self.text_area.tag_config("default", foreground=text_main)
+		self.text_area.tag_config("default", foreground="#1C1C1E")
+
+	def _toggle_theme(self):
+		if self._current_mode == "light":
+			self._current_mode = "dark"
+			self.theme_btn.config(text="🌙")
+		else:
+			self._current_mode = "light"
+			self.theme_btn.config(text="☀")
+		self._set_theme(self._current_mode)
+
+	def _set_theme(self, mode):
+		# Paletas Apple-like
+		if mode == "dark":
+			bg_main = "#1C1C1E"
+			bg_panel = "#2C2C2E"
+			accent = "#0A84FF"
+			border = "#3A3A3C"
+			text_main = "#F2F2F7"
+			text_secondary = "#A1A1AA"
+		else:
+			bg_main = "#F5F5F7"
+			bg_panel = "#FFFFFF"
+			accent = "#007AFF"
+			border = "#D1D1D6"
+			text_main = "#1C1C1E"
+			text_secondary = "#636366"
+
+		style = ttk.Style()
+		style.theme_use('clam')
+		style.configure("TFrame", background=bg_main)
+		style.configure("TLabel", background=bg_main, foreground=text_main, font=("San Francisco", 12))
+		style.configure("TButton", font=("San Francisco", 12), background=bg_panel, foreground=accent, borderwidth=0, focusthickness=2, focuscolor=accent)
+		style.map("TButton",
+			background=[('active', accent), ('!active', bg_panel)],
+			foreground=[('active', "#fff"), ('!active', accent)])
+
+		self.configure(style="TFrame")
+		if hasattr(self, 'parent'):
+			self.parent.configure(bg=bg_main)
+		# Actualizar widgets si ya existen
+		if hasattr(self, 'notes_listbox'):
+			self.notes_listbox.config(bg=bg_panel, fg=text_main, highlightbackground=border, selectbackground=accent, selectforeground="#fff")
+		if hasattr(self, 'text_area'):
+			self.text_area.config(bg=bg_panel, fg=text_main, insertbackground=accent, highlightbackground=border)
 
 	def _color_all_by_role(self):
 		self._show_note_with_highlight_filter(self.text_area.get(1.0, tk.END), "role", None, color_all=True)
@@ -135,9 +167,15 @@ class NotesApp(ttk.Frame):
 							break
 				elif filter_type == "eisenhower":
 					for key in self.eisenhower_colors:
-						if f"[E:{key[0]}]" in line or f"[E:{key}]" in line:
-							tag = f"eisen_{key}"
-							break
+						# Mapeo explícito para [E:H] => HACER_AHORA
+						if key == "HACER_AHORA":
+							if "[E:H]" in line or "[E:HACER_AHORA]" in line:
+								tag = "eisen_HACER_AHORA"
+								break
+						else:
+							if f"[E:{key[0]}]" in line or f"[E:{key}]" in line:
+								tag = f"eisen_{key}"
+								break
 				elif filter_type == "type":
 					for key in self.type_colors:
 						if f"[T:{key}]" in line:
