@@ -3,6 +3,29 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, simpledialog, Toplevel
 
 class NotesApp(ttk.Frame):
+	def _filter_by_role(self, role):
+		if not self.selected_note:
+			messagebox.showinfo("Filtrar por Rol", "Seleccione una nota para filtrar.")
+			return
+		content, _ = self.notes_manager.get_note_content(self.selected_note)
+		if content:
+			self._show_note_with_highlight_filter(content, "role", role, color_all=False)
+
+	def _filter_by_eisenhower(self, eisen):
+		if not self.selected_note:
+			messagebox.showinfo("Filtrar por Eisenhower", "Seleccione una nota para filtrar.")
+			return
+		content, _ = self.notes_manager.get_note_content(self.selected_note)
+		if content:
+			self._show_note_with_highlight_filter(content, "eisenhower", eisen, color_all=False)
+
+	def _filter_by_type(self, tipo):
+		if not self.selected_note:
+			messagebox.showinfo("Filtrar por Tipo", "Seleccione una nota para filtrar.")
+			return
+		content, _ = self.notes_manager.get_note_content(self.selected_note)
+		if content:
+			self._show_note_with_highlight_filter(content, "type", tipo, color_all=False)
 
 	def __init__(self, parent, notes_manager, *args, **kwargs):
 		super().__init__(parent, *args, **kwargs)
