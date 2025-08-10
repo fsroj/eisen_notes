@@ -197,49 +197,64 @@ class NotesApp(ttk.Frame):
 		self.text_area.config(state="normal")
 		self.text_area.delete(1.0, tk.END)
 		lines = content.split("\n")
-		for i, line in enumerate(lines):
-			start = f"{i+1}.0"
-			end = f"{i+1}.end"
+		line_number = 1
+		for line in lines:
+			show_line = False
 			tag = None
-			if color_all:
+			color = None
+			if not color_all:
+				if filter_type == "role":
+					if filter_value and f"[{filter_value}]" in line:
+						show_line = True
+						tag = f"role_{filter_value}"
+						color = self.role_colors.get(filter_value)
+				elif filter_type == "eisenhower":
+					if filter_value and (f"[E:{filter_value[0]}]" in line or f"[E:{filter_value}]" in line):
+						show_line = True
+						tag = f"eisen_{filter_value}"
+						color = self.eisenhower_colors.get(filter_value)
+				elif filter_type == "type":
+					if filter_value and f"[T:{filter_value}]" in line:
+						show_line = True
+						tag = f"type_{filter_value}"
+						color = self.type_colors.get(filter_value)
+				if not show_line:
+					continue
+			else:
 				if filter_type == "role":
 					for role in self.role_colors:
 						if f"[{role}]" in line:
 							tag = f"role_{role}"
+							color = self.role_colors.get(role)
 							break
 				elif filter_type == "eisenhower":
 					for key in self.eisenhower_colors:
-						# Mapeo explícito para [E:H] => HACER_AHORA
 						if key == "HACER_AHORA":
 							if "[E:H]" in line or "[E:HACER_AHORA]" in line:
 								tag = "eisen_HACER_AHORA"
+								color = self.eisenhower_colors.get("HACER_AHORA")
 								break
 						else:
 							if f"[E:{key[0]}]" in line or f"[E:{key}]" in line:
 								tag = f"eisen_{key}"
+								color = self.eisenhower_colors.get(key)
 								break
 				elif filter_type == "type":
 					for key in self.type_colors:
 						if f"[T:{key}]" in line:
 							tag = f"type_{key}"
+							color = self.type_colors.get(key)
 							break
-			else:
-				if filter_type == "role":
-					if filter_value and f"[{filter_value}]" in line:
-						tag = f"role_{filter_value}"
-				elif filter_type == "eisenhower":
-					if filter_value and (f"[E:{filter_value[0]}]" in line or f"[E:{filter_value}]" in line):
-						tag = f"eisen_{filter_value}"
-				elif filter_type == "type":
-					if filter_value and f"[T:{filter_value}]" in line:
-						tag = f"type_{filter_value}"
-			if not color_all and tag is None:
-				continue  # filtrar: no mostrar líneas no relevantes
-			self.text_area.insert(tk.END, line + "\n")
-			if tag:
+			if tag and color:
+				self.text_area.insert(tk.END, line + "\n")
+				start = f"{line_number}.0"
+				end = f"{line_number}.end"
+				self.text_area.tag_configure(tag, foreground=color)
+				# Elimina todos los tags previos de la línea antes de aplicar el nuevo tag
+				for t in self.text_area.tag_names():
+					self.text_area.tag_remove(t, start, end)
 				self.text_area.tag_add(tag, start, end)
-			else:
-				self.text_area.tag_add("default", start, end)
+				line_number += 1
 		self.text_area.config(state="normal")
 
 
