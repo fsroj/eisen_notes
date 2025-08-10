@@ -14,27 +14,59 @@ class NotesApp(ttk.Frame):
 		self._refresh_notes_list()
 
 	def _build_ui(self):
-		self.notes_listbox = tk.Listbox(self, width=30, height=20)
-		self.notes_listbox.grid(row=0, column=0, rowspan=6, padx=10, pady=10, sticky="ns")
+		# Lista de notas
+		self.notes_listbox = tk.Listbox(self, width=30, height=20, font=("San Francisco", 13))
+		self.notes_listbox.grid(row=0, column=0, rowspan=8, padx=10, pady=10, sticky="ns")
 		self.notes_listbox.bind("<<ListboxSelect>>", self._on_note_selected)
 
+		# Botones principales
 		self.add_button = ttk.Button(self, text="Nueva Nota", command=self._add_note)
 		self.add_button.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-
 		self.save_button = ttk.Button(self, text="Guardar Nota", command=self._save_note)
 		self.save_button.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
-
 		self.delete_button = ttk.Button(self, text="Eliminar Nota", command=self._delete_note)
 		self.delete_button.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
-
 		self.filter_button = ttk.Button(self, text="Filtrar Nota", command=self._filter_note)
 		self.filter_button.grid(row=3, column=1, padx=5, pady=5, sticky="ew")
 
-		self.text_area = scrolledtext.ScrolledText(self, width=60, height=20, wrap=tk.WORD)
-		self.text_area.grid(row=0, column=2, rowspan=6, padx=10, pady=10, sticky="nsew")
+		# Botones Mostrar Todo
+		self.show_roles_button = ttk.Button(self, text="Mostrar Roles", command=self._show_all_roles)
+		self.show_roles_button.grid(row=4, column=1, padx=5, pady=5, sticky="ew")
+		self.show_eisenhower_button = ttk.Button(self, text="Mostrar Eisenhower", command=self._show_all_eisenhower)
+		self.show_eisenhower_button.grid(row=5, column=1, padx=5, pady=5, sticky="ew")
+		self.show_types_button = ttk.Button(self, text="Mostrar Tipos", command=self._show_all_types)
+		self.show_types_button.grid(row=6, column=1, padx=5, pady=5, sticky="ew")
 
-		self.grid_rowconfigure(5, weight=1)
+		# Área de texto con scroll
+		self.text_area = scrolledtext.ScrolledText(self, width=60, height=20, wrap=tk.WORD, font=("San Francisco", 13))
+		self.text_area.grid(row=0, column=2, rowspan=8, padx=10, pady=10, sticky="nsew")
+
+		self.grid_rowconfigure(7, weight=1)
 		self.grid_columnconfigure(2, weight=1)
+
+		# Colores Apple-like para tags
+		self.role_colors = {
+			"Programador": "#007AFF", "Social": "#34C759", "Tesista": "#AF52DE", "General": "#FF9500",
+			"Asistente": "#FF2D55", "Work-out": "#FFCC00", "Estudiante": "#5AC8FA", "Trabajo": "#5856D6",
+			"Diseñador": "#FF375F", "TLP": "#FF9F0A", "Ropa/Accesorios": "#FFD60A"
+		}
+		self.eisenhower_colors = {
+			"HACER_AHORA": "#FF3B30", "PLANIFICAR": "#34C759", "DELEGAR": "#FF9500", "ELIMINAR": "#8E8E93"
+		}
+		self.type_colors = {
+			"IDEA": "#5AC8FA", "PROYECTO": "#AF52DE", "TAREA": "#FFCC00"
+		}
+
+		# Configurar tags de colores
+		for role, color in self.role_colors.items():
+			self.text_area.tag_config(f"role_{role}", foreground=color)
+		for key, color in self.eisenhower_colors.items():
+			self.text_area.tag_config(f"eisen_{key}", foreground=color)
+		for key, color in self.type_colors.items():
+			self.text_area.tag_config(f"type_{key}", foreground=color)
+
+		self.text_area.tag_config("default", foreground="#1C1C1E")
+
 
 	def _refresh_notes_list(self):
 		self.notes_listbox.delete(0, tk.END)
@@ -51,8 +83,97 @@ class NotesApp(ttk.Frame):
 		self.selected_note = note_title
 		content, msg = self.notes_manager.get_note_content(note_title)
 		if content is not None:
-			self.text_area.delete(1.0, tk.END)
-			self.text_area.insert(tk.END, content)
+			self._show_note_with_highlight(content)
+
+	def _show_note_with_highlight(self, content):
+		self.text_area.config(state="normal")
+		self.text_area.delete(1.0, tk.END)
+		lines = content.split("\n")
+		for i, line in enumerate(lines):
+			start = f"{i+1}.0"
+			end = f"{i+1}.end"
+			tag = self._get_line_tag(line)
+			self.text_area.insert(tk.END, line + "\n")
+			if tag:
+				self.text_area.tag_add(tag, start, end)
+			else:
+				self.text_area.tag_add("default", start, end)
+		self.text_area.config(state="normal")
+
+	def _get_line_tag(self, line):
+		# Detecta el tag principal de la línea
+		for role in self.role_colors:
+			if f"[{role}]" in line:
+				return f"role_{role}"
+		for key in self.eisenhower_colors:
+			if f"[E:{key[0]}]" in line or f"[E:{key}]" in line:
+				return f"eisen_{key}"
+		for key in self.type_colors:
+			if f"[T:{key}]" in line:
+				return f"type_{key}"
+		return None
+
+	def _show_all_roles(self):
+		if not self.selected_note:
+			messagebox.showinfo("Mostrar Roles", "Seleccione una nota para mostrar.")
+			return
+		content, _ = self.notes_manager.get_note_content(self.selected_note)
+		if content:
+			self._show_note_with_highlight(content)
+
+	def _show_all_eisenhower(self):
+		if not self.selected_note:
+			messagebox.showinfo("Mostrar Eisenhower", "Seleccione una nota para mostrar.")
+			return
+		content, _ = self.notes_manager.get_note_content(self.selected_note)
+		if content:
+			self._show_note_with_highlight_eisenhower(content)
+
+	def _show_note_with_highlight_eisenhower(self, content):
+		self.text_area.config(state="normal")
+		self.text_area.delete(1.0, tk.END)
+		lines = content.split("\n")
+		for i, line in enumerate(lines):
+			start = f"{i+1}.0"
+			end = f"{i+1}.end"
+			tag = None
+			for key in self.eisenhower_colors:
+				if f"[E:{key[0]}]" in line or f"[E:{key}]" in line:
+					tag = f"eisen_{key}"
+					break
+			self.text_area.insert(tk.END, line + "\n")
+			if tag:
+				self.text_area.tag_add(tag, start, end)
+			else:
+				self.text_area.tag_add("default", start, end)
+		self.text_area.config(state="normal")
+
+	def _show_all_types(self):
+		if not self.selected_note:
+			messagebox.showinfo("Mostrar Tipos", "Seleccione una nota para mostrar.")
+			return
+		content, _ = self.notes_manager.get_note_content(self.selected_note)
+		if content:
+			self._show_note_with_highlight_type(content)
+
+	def _show_note_with_highlight_type(self, content):
+		self.text_area.config(state="normal")
+		self.text_area.delete(1.0, tk.END)
+		lines = content.split("\n")
+		for i, line in enumerate(lines):
+			start = f"{i+1}.0"
+			end = f"{i+1}.end"
+			tag = None
+			for key in self.type_colors:
+				if f"[T:{key}]" in line:
+					tag = f"type_{key}"
+					break
+			self.text_area.insert(tk.END, line + "\n")
+			if tag:
+				self.text_area.tag_add(tag, start, end)
+			else:
+				self.text_area.tag_add("default", start, end)
+		self.text_area.config(state="normal")
 
 	def _add_note(self):
 		title = simpledialog.askstring("Nueva Nota", "Título de la nota:")
