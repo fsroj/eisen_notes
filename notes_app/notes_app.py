@@ -1,4 +1,3 @@
-
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, simpledialog, Toplevel
 
@@ -51,7 +50,7 @@ class NotesApp(ttk.Frame):
 			"Diseñador": "#FF375F", "TLP": "#FF9F0A", "Ropa/Accesorios": "#FFD60A", "Cuidado": "#FFEE97"
 		}
 		self.eisenhower_colors = {
-			"Hacer Ahora": "#FF3B30", "Planificar": "#464340", "Delegar": "#5856D6", "Eliminar": "#8E8E93"
+			"Hacer Ahora": "#FF3B30", "Planificar": "#FF9F0A", "Delegar": "#5856D6", "Eliminar": "#8E8E93"
 		}
 		self.type_colors = {
 			"Idea": "#5AC8FA", "Proyecto": "#AF52DE", "Tarea": "#FFCC00"
@@ -89,11 +88,27 @@ class NotesApp(ttk.Frame):
 		self.filter_roles_frame = ttk.Frame(self)
 		self.filter_roles_frame.grid(row=3, column=2, padx=10, pady=(10,0), sticky="ew")
 		ttk.Label(self.filter_roles_frame, text="Filtrar por Rol:", font=("San Francisco", 11, "bold")).pack(side=tk.LEFT, padx=2)
+		# Canvas y scrollbar horizontal
+		self.roles_canvas = tk.Canvas(self.filter_roles_frame, height=36, highlightthickness=0, bg="white")
+		self.roles_scrollbar = ttk.Scrollbar(self.filter_roles_frame, orient="horizontal", command=self.roles_canvas.xview)
+		self.roles_inner_frame = ttk.Frame(self.roles_canvas)
+		self.roles_inner_frame.bind(
+			"<Configure>",
+			lambda e: self.roles_canvas.configure(scrollregion=self.roles_canvas.bbox("all"))
+		)
+		self.roles_canvas.create_window((0, 0), window=self.roles_inner_frame, anchor="nw")
+		self.roles_canvas.configure(xscrollcommand=self.roles_scrollbar.set)
+		self.roles_canvas.pack(side=tk.LEFT, fill=tk.X, expand=True)
+		self.roles_scrollbar.pack(side=tk.BOTTOM, fill=tk.X, padx=(60,0))
+		# Botones de roles dentro del inner_frame
 		self.role_filter_buttons = []
 		for role in self.role_colors:
-			btn = tk.Button(self.filter_roles_frame, text=role, command=lambda r=role: self._filter_by_role(r), fg=self.role_colors[role], font=("San Francisco", 11, "bold"), relief=tk.GROOVE)
-			btn.pack(side=tk.LEFT, padx=1)
+			btn = tk.Button(self.roles_inner_frame, text=role, command=lambda r=role: self._filter_by_role(r), fg=self.role_colors[role], font=("San Francisco", 11, "bold"), relief=tk.GROOVE)
+			btn.pack(side=tk.LEFT, padx=1, pady=2)
 			self.role_filter_buttons.append(btn)
+		# Botón + para añadir/gestionar roles
+		self.add_role_btn = tk.Button(self.roles_inner_frame, text="+", command=self._manage_roles, fg="#007AFF", font=("San Francisco", 13, "bold"), relief=tk.RAISED, width=3)
+		self.add_role_btn.pack(side=tk.LEFT, padx=6, pady=2)
 
 		# Botones de filtro individuales para cada valor de Eisenhower (debajo del área de texto)
 		self.filter_eisenhower_frame = ttk.Frame(self)
@@ -183,6 +198,7 @@ class NotesApp(ttk.Frame):
 		if hasattr(self, 'type_filter_buttons'):
 			for btn in self.type_filter_buttons:
 				btn.config(bg=btn_bg, activebackground=border)
+		self._update_roles_win_theme()
 
 	def _color_all_by_role(self):
 		self._show_note_with_highlight_filter(self.text_area.get(1.0, tk.END), "role", None, color_all=True)
@@ -384,8 +400,21 @@ class NotesApp(ttk.Frame):
 		ok, msg = self.notes_manager.save_note_content(self.selected_note, content)
 		if ok:
 			messagebox.showinfo("Éxito", msg)
+			self._refresh_notes_list()         # Refresca la lista de notas
+			self._refresh_roles_buttons()      # Refresca botones de roles
+			self._refresh_color_tags()         # Refresca tags de colores
 		else:
 			messagebox.showerror("Error", msg)
+
+	def _refresh_color_tags(self):
+		# Vuelve a configurar los tags de colores en el text_area
+		for role, color in self.role_colors.items():
+			self.text_area.tag_config(f"role_{role}", foreground=color)
+		for key, color in self.eisenhower_colors.items():
+			self.text_area.tag_config(f"eisen_{key}", foreground=color)
+		for key, color in self.type_colors.items():
+			self.text_area.tag_config(f"type_{key}", foreground=color)
+		self.text_area.tag_config("default", foreground="#1C1C1E")
 
 	def _delete_note(self):
 		if not self.selected_note:
@@ -403,6 +432,15 @@ class NotesApp(ttk.Frame):
 				messagebox.showinfo("Éxito", "Nota eliminada.")
 			except Exception as e:
 				messagebox.showerror("Error", f"No se pudo eliminar la nota: {e}")
+
+	def _refresh_roles_buttons(self):
+		# Actualiza los colores de los botones de filtro de roles
+		if hasattr(self, 'role_filter_buttons'):
+			for btn in self.role_filter_buttons:
+				role = btn.cget('text')
+				if role in self.role_colors:
+					btn.config(fg=self.role_colors[role])
+
 
 	def _filter_note(self):
 		if not self.selected_note:
@@ -437,3 +475,154 @@ class NotesApp(ttk.Frame):
 				result_text.insert(tk.END, msg)
 
 		ttk.Button(filter_win, text="Filtrar", command=do_filter).pack(pady=5)
+	def _manage_roles(self):
+        # Ventana emergente para gestionar roles, sincronizada con el tema
+		win = Toplevel(self)
+		win.title("Gestionar Roles")
+		win.geometry("350x320")
+		win.transient(self)
+		win.grab_set()
+
+        # Colores según tema actual
+		if self._current_mode == "dark":
+			bg_main = "#1C1C1E"
+			bg_panel = "#2C2C2E"
+			text_main = "#F2F2F7"
+			border = "#3A3A3C"
+		else:
+			bg_main = "#F5F5F7"
+			bg_panel = "#FFFFFF"
+			text_main = "#1C1C1E"
+			border = "#D1D1D6"
+
+		win.configure(bg=bg_main)
+
+		label = tk.Label(win, text="Roles existentes:", font=("San Francisco", 12, "bold"), bg=bg_main, fg=text_main)
+		label.pack(pady=(10,2))
+		roles_listbox = tk.Listbox(win, height=10, font=("San Francisco", 11), bg=bg_panel, fg=text_main, highlightbackground=border, selectbackground=border, selectforeground=text_main)
+		roles_listbox.pack(fill=tk.BOTH, expand=True, padx=10)
+		for role in self.role_colors:
+			roles_listbox.insert(tk.END, role)
+
+        # Campo para nuevo nombre/color
+		entry_frame = tk.Frame(win, bg=bg_main)
+		entry_frame.pack(pady=6)
+		tk.Label(entry_frame, text="Nombre:", bg=bg_main, fg=text_main).pack(side=tk.LEFT)
+		name_var = tk.StringVar()
+		name_entry = tk.Entry(entry_frame, textvariable=name_var, width=15, bg=bg_panel, fg=text_main, insertbackground=text_main)
+		name_entry.pack(side=tk.LEFT, padx=4)
+		tk.Label(entry_frame, text="Color:", bg=bg_main, fg=text_main).pack(side=tk.LEFT)
+		color_var = tk.StringVar(value="#007AFF")
+		color_entry = tk.Entry(entry_frame, textvariable=color_var, width=8, bg=bg_panel, fg=text_main, insertbackground=text_main)
+		color_entry.pack(side=tk.LEFT, padx=2)
+		def choose_color():
+			from tkinter import colorchooser
+			color_code = colorchooser.askcolor(title="Elige un color", initialcolor=color_var.get())
+			if color_code and color_code[1]:
+				color_var.set(color_code[1])
+		color_btn = tk.Button(entry_frame, text="🎨", width=2, command=choose_color, bg=bg_panel, fg=text_main)
+		color_btn.pack(side=tk.LEFT, padx=2)
+  
+		def on_select(event=None):
+			idx = roles_listbox.curselection()
+			if idx:
+				role = roles_listbox.get(idx[0])
+				name_var.set(role)
+				color_var.set(self.role_colors[role])
+		roles_listbox.bind('<<ListboxSelect>>', on_select)
+
+		def add_role():
+			name = name_var.get().strip()
+			color = color_var.get().strip()
+			if not name:
+				messagebox.showinfo("Error", "El nombre no puede estar vacío.", parent=win)
+				return
+			if name in self.role_colors:
+				messagebox.showinfo("Error", "Ese rol ya existe.", parent=win)
+				return
+			self.role_colors[name] = color if color else "#007AFF"
+			roles_listbox.insert(tk.END, name)
+			self._refresh_roles_buttons()
+			self._refresh_color_tags()
+			name_var.set("")
+			color_var.set("#007AFF")
+
+		def edit_role():
+			idx = roles_listbox.curselection()
+			if not idx:
+				messagebox.showinfo("Error", "Seleccione un rol para editar.", parent=win)
+				return
+			old_name = roles_listbox.get(idx[0])
+			new_name = name_var.get().strip()
+			new_color = color_var.get().strip()
+			if not new_name:
+				messagebox.showinfo("Error", "El nombre no puede estar vacío.", parent=win)
+				return
+			if new_name != old_name and new_name in self.role_colors:
+				messagebox.showinfo("Error", "Ese rol ya existe.", parent=win)
+				return
+			# Actualizar dict y listbox
+			self.role_colors.pop(old_name)
+			self.role_colors[new_name] = new_color if new_color else "#007AFF"
+			roles_listbox.delete(idx[0])
+			roles_listbox.insert(idx[0], new_name)
+			self._refresh_roles_buttons()
+			self._refresh_color_tags()
+			name_var.set("")
+			color_var.set("#007AFF")
+
+		def delete_role():
+			idx = roles_listbox.curselection()
+			if not idx:
+				messagebox.showinfo("Error", "Seleccione un rol para eliminar.", parent=win)
+				return
+			role = roles_listbox.get(idx[0])
+			if messagebox.askyesno("Eliminar", f"¿Eliminar el rol '{role}'?", parent=win):
+				self.role_colors.pop(role)
+				roles_listbox.delete(idx[0])
+				self._refresh_roles_buttons()
+				self._refresh_color_tags()
+				name_var.set("")
+				color_var.set("#007AFF")
+
+		btns_frame = tk.Frame(win, bg=bg_main)
+		btns_frame.pack(pady=8)
+		tk.Button(btns_frame, text="Añadir", command=add_role, bg=bg_panel, fg=text_main).pack(side=tk.LEFT, padx=4)
+		tk.Button(btns_frame, text="Editar", command=edit_role, bg=bg_panel, fg=text_main).pack(side=tk.LEFT, padx=4)
+		tk.Button(btns_frame, text="Eliminar", command=delete_role, bg=bg_panel, fg=text_main).pack(side=tk.LEFT, padx=4)
+
+        # Guardar referencia para actualizar tema si cambia
+		self._roles_win = win
+	def _update_roles_win_theme(self):
+			if not hasattr(self, '_roles_win') or not self._roles_win.winfo_exists():
+				return
+			win = self._roles_win
+			if self._current_mode == "dark":
+				bg_main = "#1C1C1E"
+				bg_panel = "#2C2C2E"
+				text_main = "#F2F2F7"
+				border = "#3A3A3C"
+			else:
+				bg_main = "#F5F5F7"
+				bg_panel = "#FFFFFF"
+				text_main = "#1C1C1E"
+				border = "#D1D1D6"
+			win.configure(bg=bg_main)
+			for widget in win.winfo_children():
+				if isinstance(widget, (tk.Label, tk.Button, tk.Entry, tk.Frame, tk.Listbox)):
+					try:
+						widget.configure(bg=bg_main, fg=text_main)
+					except:
+						pass
+				if isinstance(widget, tk.Listbox):
+					widget.configure(bg=bg_panel, fg=text_main, highlightbackground=border, selectbackground=border, selectforeground=text_main)
+				if isinstance(widget, tk.Frame):
+					for sub in widget.winfo_children():
+						try:
+							sub.configure(bg=bg_main, fg=text_main)
+						except:
+							pass
+						if isinstance(sub, tk.Entry):
+							sub.configure(bg=bg_panel, fg=text_main, insertbackground=text_main)
+						if isinstance(sub, tk.Button):
+							sub.configure(bg=bg_panel, fg=text_main)
