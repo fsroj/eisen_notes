@@ -48,10 +48,10 @@ class NotesApp(ttk.Frame):
 		self.role_colors = {
 			"Programador": "#007AFF", "Social": "#34C759", "Tesista": "#AF52DE", "General": "#FF9500",
 			"Asistente": "#FF2D55", "Work-out": "#FFCC00", "Estudiante": "#5AC8FA", "Trabajo": "#5856D6",
-			"Diseñador": "#FF375F", "TLP": "#FF9F0A", "Ropa/Accesorios": "#FFD60A"
+			"Diseñador": "#FF375F", "TLP": "#FF9F0A", "Ropa/Accesorios": "#FFD60A", "Cuidado": "#FFEE97"
 		}
 		self.eisenhower_colors = {
-			"Hacer Ahora": "#FF3B30", "Planificar": "#FF9500", "Delegar": "#5856D6", "Eliminar": "#8E8E93"
+			"Hacer Ahora": "#FF3B30", "Planificar": "#464340", "Delegar": "#5856D6", "Eliminar": "#8E8E93"
 		}
 		self.type_colors = {
 			"Idea": "#5AC8FA", "Proyecto": "#AF52DE", "Tarea": "#FFCC00"
