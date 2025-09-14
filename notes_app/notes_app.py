@@ -1,7 +1,44 @@
 import tkinter as tk
+from notes_manager import NotesManagerCloudMixin
 from tkinter import ttk, scrolledtext, messagebox, simpledialog, Toplevel
 
 class NotesApp(ttk.Frame):
+	def _upload_selected_note_to_drive(self):
+		if not self.selected_note:
+			messagebox.showinfo("Subir a Drive", "Seleccione una nota para subir.")
+			return
+		ok, msg = self.notes_manager.upload_note_to_drive(self.selected_note)
+		if ok:
+			messagebox.showinfo("Éxito", msg)
+		else:
+			messagebox.showerror("Error", msg)
+
+	def _list_and_download_drive_note(self):
+		notes = self.notes_manager.list_drive_notes()
+		if not notes:
+			messagebox.showinfo("Drive", "No hay notas en Google Drive.")
+			return
+		win = Toplevel(self)
+		win.title("Notas en Google Drive")
+		win.geometry("400x300")
+		lb = tk.Listbox(win, width=40, height=15)
+		lb.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+		for title, file_id in notes:
+			lb.insert(tk.END, title)
+		def on_select():
+			idx = lb.curselection()
+			if not idx:
+				return
+			file_id = notes[idx[0]][1]
+			title, content = self.notes_manager.download_note_from_drive(file_id)
+			self.selected_note = title.replace('.md','')
+			self._refresh_notes_list()
+			self.text_area.delete(1.0, tk.END)
+			self.text_area.insert(tk.END, content)
+			win.destroy()
+			messagebox.showinfo("Éxito", f"Nota '{title}' descargada de Drive.")
+		btn = ttk.Button(win, text="Descargar y abrir", command=on_select)
+		btn.pack(pady=5)
 	def _filter_by_role(self, role):
 		if not self.selected_note:
 			messagebox.showinfo("Filtrar por Rol", "Seleccione una nota para filtrar.")
@@ -28,6 +65,10 @@ class NotesApp(ttk.Frame):
 
 	def __init__(self, parent, notes_manager, *args, **kwargs):
 		super().__init__(parent, *args, **kwargs)
+		# Si notes_manager no tiene mixin, lo extendemos
+		if not hasattr(notes_manager, 'upload_note_to_drive'):
+			notes_manager.__class__ = type('NotesManagerCloud', (notes_manager.__class__, NotesManagerCloudMixin), {})
+			NotesManagerCloudMixin.__init__(notes_manager)
 		self.notes_manager = notes_manager
 		self.parent = parent
 		self.selected_note = None
@@ -71,6 +112,13 @@ class NotesApp(ttk.Frame):
 		self.save_button.pack(side=tk.LEFT, padx=4)
 		self.delete_button = ttk.Button(self.action_buttons_frame, text="🗑", width=3, command=self._delete_note, style="TButton")
 		self.delete_button.pack(side=tk.LEFT, padx=4)
+		# Botón para cargar nota desde Drive
+		self.download_drive_button = ttk.Button(self.action_buttons_frame, text="⤓", width=5, command=self._list_and_download_drive_note, style="TButton")
+		self.download_drive_button.pack(side=tk.LEFT, padx=2)
+		# Botón para subir nota seleccionada a Drive
+		self.upload_drive_button = ttk.Button(self.action_buttons_frame, text="⤒", width=5, command=self._upload_selected_note_to_drive, style="TButton")
+		self.upload_drive_button.pack(side=tk.LEFT, padx=2)
+		
 
 		# Frame para colorear todo por...
 		self.colorear_frame = ttk.Frame(self)

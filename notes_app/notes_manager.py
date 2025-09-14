@@ -2,6 +2,7 @@ import os
 import json
 import hashlib
 from datetime import datetime
+from google_drive_helper import GoogleDriveHelper
 
 class NotesManager:
     def __init__(self, notes_dir="notes", calendar_file="calendar_events.json"):
@@ -211,3 +212,25 @@ class NotesManager:
         if not content or content.strip() == f"# {title}\n" or content.strip() == f"# {title}":
             return True
         return False
+
+# Mixin para integración con Google Drive
+class NotesManagerCloudMixin:
+    def __init__(self):
+        self.drive_helper = GoogleDriveHelper()
+
+    def upload_note_to_drive(self, title):
+        content, msg = self.get_note_content(title)
+        if content is None:
+            return False, msg
+        file_id = self.drive_helper.upload_note(f"{title}.md", content)
+        return True, f"Nota '{title}' subida a Drive (id: {file_id})"
+
+    def list_drive_notes(self):
+        return self.drive_helper.list_notes()
+
+    def download_note_from_drive(self, file_id):
+        title, content = self.drive_helper.download_note(file_id)
+        # Guarda localmente
+        with open(self._get_note_path(title.replace('.md','')), 'w', encoding='utf-8') as f:
+            f.write(content)
+        return title, content
