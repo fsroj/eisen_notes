@@ -72,6 +72,7 @@ class NotesApp(ttk.Frame):
 		self.notes_manager = notes_manager
 		self.parent = parent
 		self.selected_note = None
+		self.role_colors = {}  # Ahora se cargan por nota
 		self._build_ui()
 		self._refresh_notes_list()
 
@@ -85,11 +86,7 @@ class NotesApp(ttk.Frame):
 		self.theme_btn.grid(row=0, column=2, padx=10, pady=(10,0), sticky="ne")
 
 		# Colores Apple-like para tags
-		self.role_colors = {
-			"Programador": "#007AFF", "Social": "#34C759", "Tesista": "#AF52DE", "General": "#FF9500",
-			"Asistente": "#FF2D55", "Work-out": "#FFCC00", "Estudiante": "#5AC8FA", "Trabajo": "#5856D6",
-			"Diseñador": "#FF375F", "TLP": "#FF9F0A", "Ropa/Accesorios": "#FFD60A", "Cuidado": "#FFEE97"
-		}
+		# self.role_colors se inicializa vacía y se carga por nota
 		self.eisenhower_colors = {
 			"Hacer Ahora": "#FF3B30", "Planificar": "#FF9F0A", "Delegar": "#5856D6", "Eliminar": "#8E8E93"
 		}
@@ -129,7 +126,7 @@ class NotesApp(ttk.Frame):
 		ttk.Button(self.colorear_frame, text="Tipo", command=self._color_all_by_type).pack(side=tk.LEFT, padx=1)
 
 		# Área de texto con scroll
-		self.text_area = scrolledtext.ScrolledText(self, width=60, height=20, wrap=tk.WORD, font=("San Francisco", 13), padx=16, pady=12)
+		self.text_area = scrolledtext.ScrolledText(self, width=60, height=23, wrap=tk.WORD, font=("San Francisco", 13), padx=16, pady=12)
 		self.text_area.grid(row=2, column=2, rowspan=1, padx=10, pady=10, sticky="nsew")
 
 		# Botones de filtro individuales para cada valor de roles (debajo del área de texto)
@@ -335,9 +332,20 @@ class NotesApp(ttk.Frame):
 		idx = selection[0]
 		note_title = self.notes_listbox.get(idx)
 		self.selected_note = note_title
-		content, msg = self.notes_manager.get_note_content(note_title)
+		content, roles, msg = self.notes_manager.get_note_content(note_title)
+		if roles is not None:
+			self.role_colors = roles.copy()
+		else:
+			# Si no hay roles en la nota, usar algunos por defecto
+			self.role_colors = {
+				"Programador": "#007AFF", "Social": "#34C759", "Tesista": "#AF52DE", "General": "#FF9500",
+				"Asistente": "#FF2D55", "Work-out": "#FFCC00", "Estudiante": "#5AC8FA", "Trabajo": "#5856D6",
+				"Diseñador": "#FF375F", "TLP": "#FF9F0A", "Ropa/Accesorios": "#FFD60A", "Cuidado": "#FFEE97"
+			}
 		if content is not None:
 			self._show_note_with_highlight(content)
+		self._refresh_roles_buttons()
+		self._refresh_color_tags()
 
 	def _show_note_with_highlight(self, content):
 		self.text_area.config(state="normal")
@@ -445,7 +453,7 @@ class NotesApp(ttk.Frame):
 			messagebox.showinfo("Guardar Nota", "Seleccione una nota para guardar.")
 			return
 		content = self.text_area.get(1.0, tk.END)
-		ok, msg = self.notes_manager.save_note_content(self.selected_note, content)
+		ok, msg = self.notes_manager.save_note_content(self.selected_note, content, roles=self.role_colors)
 		if ok:
 			messagebox.showinfo("Éxito", msg)
 			self._refresh_notes_list()         # Refresca la lista de notas
@@ -482,12 +490,19 @@ class NotesApp(ttk.Frame):
 				messagebox.showerror("Error", f"No se pudo eliminar la nota: {e}")
 
 	def _refresh_roles_buttons(self):
-		# Actualiza los colores de los botones de filtro de roles
+		# Elimina todos los botones actuales de roles
 		if hasattr(self, 'role_filter_buttons'):
 			for btn in self.role_filter_buttons:
-				role = btn.cget('text')
-				if role in self.role_colors:
-					btn.config(fg=self.role_colors[role])
+				btn.destroy()
+			self.role_filter_buttons.clear()
+		# Crea nuevos botones según los roles actuales
+		for role in self.role_colors:
+			btn = tk.Button(self.roles_inner_frame, text=role, command=lambda r=role: self._filter_by_role(r), fg=self.role_colors[role], font=("San Francisco", 11, "bold"), relief=tk.GROOVE)
+			btn.pack(side=tk.LEFT, padx=1, pady=2)
+			self.role_filter_buttons.append(btn)
+		# Asegura que el botón + esté al final
+		if hasattr(self, 'add_role_btn'):
+			self.add_role_btn.lift()
 
 
 	def _filter_note(self):
@@ -552,7 +567,7 @@ class NotesApp(ttk.Frame):
 		for role in self.role_colors:
 			roles_listbox.insert(tk.END, role)
 
-        # Campo para nuevo nombre/color
+		# Campo para nuevo nombre/color
 		entry_frame = tk.Frame(win, bg=bg_main)
 		entry_frame.pack(pady=6)
 		tk.Label(entry_frame, text="Nombre:", bg=bg_main, fg=text_main).pack(side=tk.LEFT)
@@ -563,6 +578,13 @@ class NotesApp(ttk.Frame):
 		color_var = tk.StringVar(value="#007AFF")
 		color_entry = tk.Entry(entry_frame, textvariable=color_var, width=8, bg=bg_panel, fg=text_main, insertbackground=text_main)
 		color_entry.pack(side=tk.LEFT, padx=2)
+		# Canvas para mostrar el color seleccionado
+		color_circle = tk.Canvas(entry_frame, width=22, height=22, bg=bg_main, highlightthickness=0, bd=0)
+		circle_id = color_circle.create_oval(4, 4, 18, 18, fill=color_var.get(), outline="#888", width=1)
+		color_circle.pack(side=tk.LEFT, padx=2)
+		def update_circle(*args):
+			color_circle.itemconfig(circle_id, fill=color_var.get())
+		color_var.trace_add('write', update_circle)
 		def choose_color():
 			from tkinter import colorchooser
 			color_code = colorchooser.askcolor(title="Elige un color", initialcolor=color_var.get())

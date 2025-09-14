@@ -10,7 +10,7 @@ class NotesManager:
         os.makedirs(self.notes_dir, exist_ok=True)
         self.calendar_file = calendar_file
 
-        self.valid_roles = ["Programador", "Social", "Tesista", "General", "Asistente", "Work-out", "Estudiante", "Trabajo", "Diseñador", "TLP", "Ropa/Accesorios", "Cuidado"]
+    # Los roles son por nota, no globales
         self.eisenhower_categories = {
             "HACER_AHORA": "Urgente e Importante",
             "PLANIFICAR": "Importante, no Urgente",
@@ -52,13 +52,21 @@ class NotesManager:
                 return False, f"Error al crear la nota: {e}"
         return True, f"La nota '{title}' ya existe."
 
-    def save_note_content(self, title, content):
+    def save_note_content(self, title, content, roles=None):
+        """
+        Guarda el contenido y los roles de la nota en el archivo, usando un marcador especial.
+        """
         note_path = self._get_note_path(title)
         if not os.path.exists(note_path):
             return False, f"Error: La nota '{title}' no existe para guardar."
         try:
             with open(note_path, 'w', encoding="utf-8") as f:
-                f.write(content)
+                # Escribe el contenido principal
+                f.write(content.rstrip("\n"))
+                f.write("\n\n---ROLES---\n")
+                if roles is not None:
+                    for role, color in roles.items():
+                        f.write(f"{role}:{color}\n")
             return True, f"Nota '{title}' guardada exitosamente."
         except Exception as e:
             return False, f"Error al guardar la nota: {e}"
@@ -80,24 +88,41 @@ class NotesManager:
         return hierarchy
 
     def get_note_content(self, title):
+        """
+        Devuelve una tupla (contenido, roles_dict, mensaje).
+        Si no hay sección de roles, roles_dict será None.
+        """
         note_path = self._get_note_path(title)
         if not os.path.exists(note_path):
-            return None, f"Error: La nota '{title}' no existe."
+            return None, None, f"Error: La nota '{title}' no existe."
         try:
             with open(note_path, 'r', encoding="utf-8") as f:
-                content = f.read()
-            return content, "Contenido cargado."
+                full_content = f.read()
+            if '\n---ROLES---\n' in full_content:
+                content, roles_section = full_content.split('\n---ROLES---\n', 1)
+                roles_dict = {}
+                for line in roles_section.strip().splitlines():
+                    if ':' in line:
+                        role, color = line.split(':', 1)
+                        roles_dict[role.strip()] = color.strip()
+                return content, roles_dict, "Contenido y roles cargados."
+            else:
+                return full_content, None, "Contenido cargado (sin roles)."
         except Exception as e:
-            return None, f"Error al leer la nota: {e}"
+            return None, None, f"Error al leer la nota: {e}"
 
-    def get_line_classification(self, line_text):
+    def get_line_classification(self, line_text, roles=None):
+        """
+        Clasifica la línea usando los roles dados (por nota).
+        """
         original_line = line_text.strip()
         remaining_line = original_line
         classifications = []
         found_role = True
+        valid_roles = list(roles.keys()) if roles else []
         while found_role:
             found_role = False
-            for r in self.valid_roles:
+            for r in valid_roles:
                 role_prefix = f"[{r}]"
                 if remaining_line.startswith(role_prefix):
                     classifications.append(("role", r))
@@ -119,14 +144,14 @@ class NotesManager:
         return classifications
 
     def filter_note_by_classification(self, title, classification_type, classification_name):
-        content, msg = self.get_note_content(title)
+        content, roles, msg = self.get_note_content(title)
         if content is None:
             return [], msg
         filtered_lines_with_tags = []
         lines = content.split('\n')
         for line in lines:
             line_stripped = line.strip()
-            detected_classifications = self.get_line_classification(line_stripped)
+            detected_classifications = self.get_line_classification(line_stripped, roles)
             found_match = False
             primary_tag_to_display = "general_text"
             for detected_type, detected_name in detected_classifications:

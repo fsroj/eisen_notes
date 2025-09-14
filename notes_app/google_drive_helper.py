@@ -17,9 +17,9 @@ class GoogleDriveHelper:
         return file['id']
 
     def list_notes(self):
-        # Solo archivos de texto
-        file_list = self.drive.ListFile({'q': "mimeType='text/plain' and trashed=false"}).GetList()
-        return [(f['title'], f['id']) for f in file_list]
+        # Buscar todos los archivos no eliminados y filtrar los que terminan en .md
+        file_list = self.drive.ListFile({'q': "trashed=false"}).GetList()
+        return [(f['title'], f['id']) for f in file_list if f['title'].lower().endswith('.md')]
 
     def download_note(self, file_id):
         file = self.drive.CreateFile({'id': file_id})
